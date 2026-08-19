@@ -1,0 +1,77 @@
+datasource:
+  id: ecommerce_mysql
+  name: 电商 MySQL 库
+  type: mysql
+
+tables:
+  - name: users
+    description: 用户表，存储平台注册用户的基本信息
+    columns:
+      - name: id
+        type: bigint
+        description: 用户ID
+        is_primary_key: true
+        semantic_type: id
+      - name: username
+        type: varchar
+        description: 用户名
+        semantic_type: dimension
+      - name: email
+        type: varchar
+        description: 邮箱地址
+      - name: status
+        type: varchar
+        description: 用户状态
+        enum_values:
+          - active
+          - inactive
+          - banned
+        semantic_type: category
+      - name: created_at
+        type: datetime
+        description: 注册时间
+        semantic_type: timestamp
+    examples:
+      - question: 上个月新增用户数
+        sql: SELECT COUNT(*) FROM users WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
+      - question: 活跃用户有多少
+        sql: SELECT COUNT(*) FROM users WHERE status = 'active'
+
+  - name: orders
+    description: 订单表，存储用户的订单信息
+    columns:
+      - name: id
+        type: bigint
+        description: 订单ID
+        is_primary_key: true
+        semantic_type: id
+      - name: user_id
+        type: bigint
+        description: 下单用户ID
+        is_foreign_key: true
+        foreign_key_table: users
+        foreign_key_column: id
+        semantic_type: id
+      - name: total_amount
+        type: decimal
+        description: 订单总金额
+        semantic_type: amount
+      - name: status
+        type: varchar
+        description: 订单状态
+        enum_values:
+          - pending
+          - paid
+          - shipped
+          - completed
+          - cancelled
+        semantic_type: category
+      - name: created_at
+        type: datetime
+        description: 下单时间
+        semantic_type: timestamp
+    examples:
+      - question: 本月订单总金额
+        sql: SELECT SUM(total_amount) FROM orders WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+      - question: 已完成订单数量
+        sql: SELECT COUNT(*) FROM orders WHERE status = 'completed'

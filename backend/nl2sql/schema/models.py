@@ -63,6 +63,8 @@ class Schema(BaseModel):
 class DatasourceSchema(BaseModel):
     """数据源 Schema：一个数据源对应一个 Schema。"""
 
+    model_config = {"protected_namespaces": ()}
+
     datasource_id: str
     datasource_name: str = ""
     datasource_type: str = "mysql"
