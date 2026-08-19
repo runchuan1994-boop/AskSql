@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
 
 class Settings(BaseSettings):
+    """全局配置，从环境变量读取。"""
+
+    model_config = SettingsConfigDict(env_file=".env")
+
     # LLM
     llm_provider: str = "claude"
     anthropic_api_key: str = ""
@@ -22,9 +26,6 @@ class Settings(BaseSettings):
     sql_timeout_seconds: int = 30
     sql_max_rows: int = 1000
     agent_timeout_seconds: int = 300
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()
