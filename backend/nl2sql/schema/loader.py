@@ -51,7 +51,7 @@ class SchemaLoader:
             datasource_id=ds_info.get("id", ""),
             datasource_name=ds_info.get("name", ""),
             datasource_type=ds_info.get("type", "mysql"),
-            schema=Schema(tables=tables),
+            db_schema=Schema(tables=tables),
         )
 
     def _parse_table(self, table_data: dict[str, Any]) -> Table:

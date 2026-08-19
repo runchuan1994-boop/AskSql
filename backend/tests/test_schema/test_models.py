@@ -128,7 +128,7 @@ class TestDatasourceSchema:
             datasource_id="ecommerce_mysql",
             datasource_name="电商 MySQL 库",
             datasource_type="mysql",
-            schema=Schema(
+            db_schema=Schema(
                 tables=[
                     Table(
                         name="users",
@@ -157,16 +157,16 @@ class TestDatasourceSchema:
         assert ds.datasource_id == "ecommerce_mysql"
         assert ds.datasource_name == "电商 MySQL 库"
         assert ds.datasource_type == "mysql"
-        assert len(ds.schema.tables) == 2
-        assert ds.schema.table_names == ["users", "orders"]
+        assert len(ds.db_schema.tables) == 2
+        assert ds.db_schema.table_names == ["users", "orders"]
 
-        users = ds.schema.get_table("users")
+        users = ds.db_schema.get_table("users")
         assert users is not None
         assert len(users.columns) == 3
         assert users.get_column("id").is_primary_key is True
         assert users.get_column("status").enum_values == ["active", "inactive"]
 
-        orders = ds.schema.get_table("orders")
+        orders = ds.db_schema.get_table("orders")
         assert orders is not None
         fk_col = orders.get_column("user_id")
         assert fk_col.is_foreign_key is True
@@ -178,7 +178,7 @@ class TestDatasourceSchema:
     def test_default_datasource_type(self):
         ds = DatasourceSchema(
             datasource_id="test",
-            schema=Schema(tables=[]),
+            db_schema=Schema(tables=[]),
         )
         assert ds.datasource_type == "mysql"
         assert ds.datasource_name == ""

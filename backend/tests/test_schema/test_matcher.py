@@ -11,7 +11,7 @@ def _make_ds(datasource_id: str, tables: list[Table]) -> DatasourceSchema:
         datasource_id=datasource_id,
         datasource_name=f"{datasource_id} 库",
         datasource_type="mysql",
-        schema=Schema(tables=tables),
+        db_schema=Schema(tables=tables),
     )
 
 
@@ -160,7 +160,7 @@ class TestMatchTables:
 class TestMatchColumns:
     def test_exact_column_name_match(self, sample_datasources):
         matcher = SchemaMatcher(sample_datasources)
-        users_table = sample_datasources[0].schema.get_table("users")
+        users_table = sample_datasources[0].db_schema.get_table("users")
 
         results = matcher.match_columns(users_table, "username")
         assert len(results) > 0
@@ -168,7 +168,7 @@ class TestMatchColumns:
 
     def test_column_description_match(self, sample_datasources):
         matcher = SchemaMatcher(sample_datasources)
-        users_table = sample_datasources[0].schema.get_table("users")
+        users_table = sample_datasources[0].db_schema.get_table("users")
 
         # "注册时间" 在 created_at 的描述里
         results = matcher.match_columns(users_table, "注册时间")
@@ -177,7 +177,7 @@ class TestMatchColumns:
 
     def test_semantic_type_match(self, sample_datasources):
         matcher = SchemaMatcher(sample_datasources)
-        orders_table = sample_datasources[0].schema.get_table("orders")
+        orders_table = sample_datasources[0].db_schema.get_table("orders")
 
         # 匹配 amount 语义类型的列
         results = matcher.match_columns(orders_table, "金额")
@@ -187,13 +187,13 @@ class TestMatchColumns:
 
     def test_top_k_limit(self, sample_datasources):
         matcher = SchemaMatcher(sample_datasources)
-        users_table = sample_datasources[0].schema.get_table("users")
+        users_table = sample_datasources[0].db_schema.get_table("users")
         results = matcher.match_columns(users_table, "id", top_k=2)
         assert len(results) == 2
 
     def test_results_sorted_by_score_desc(self, sample_datasources):
         matcher = SchemaMatcher(sample_datasources)
-        users_table = sample_datasources[0].schema.get_table("users")
+        users_table = sample_datasources[0].db_schema.get_table("users")
         results = matcher.match_columns(users_table, "用户名 username")
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)

@@ -24,7 +24,7 @@ class TestSchemaLoaderLoadFromYaml:
         assert ds.datasource_name == "电商 MySQL 库"
         assert ds.datasource_type == "mysql"
 
-        schema = ds.schema
+        schema = ds.db_schema
         assert isinstance(schema, Schema)
         assert len(schema.tables) == 2
         assert schema.table_names == ["users", "orders"]
@@ -32,7 +32,7 @@ class TestSchemaLoaderLoadFromYaml:
     def test_users_table_structure(self):
         loader = SchemaLoader()
         ds = loader.load_from_yaml(ECOMMERCE_YAML)
-        users = ds.schema.get_table("users")
+        users = ds.db_schema.get_table("users")
 
         assert users is not None
         assert users.name == "users"
@@ -60,7 +60,7 @@ class TestSchemaLoaderLoadFromYaml:
     def test_orders_table_foreign_key(self):
         loader = SchemaLoader()
         ds = loader.load_from_yaml(ECOMMERCE_YAML)
-        orders = ds.schema.get_table("orders")
+        orders = ds.db_schema.get_table("orders")
 
         assert orders is not None
         user_id_col = orders.get_column("user_id")
@@ -95,8 +95,8 @@ tables:
             assert ds.datasource_id == "test_db"
             assert ds.datasource_name == ""
             assert ds.datasource_type == "mysql"
-            assert len(ds.schema.tables) == 1
-            assert ds.schema.get_table("items").columns[0].name == "id"
+            assert len(ds.db_schema.tables) == 1
+            assert ds.db_schema.get_table("items").columns[0].name == "id"
         finally:
             os.unlink(tmp_path)
 

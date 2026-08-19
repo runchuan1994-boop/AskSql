@@ -59,7 +59,7 @@ class SchemaMatcher:
         # 空查询直接返回 0 分结果
         if not query_lower:
             for ds in self.datasources:
-                for table in ds.schema.tables:
+                for table in ds.db_schema.tables:
                     results.append(
                         TableMatch(datasource_id=ds.datasource_id, table=table, score=0.0)
                     )
@@ -67,7 +67,7 @@ class SchemaMatcher:
             return results[:top_k]
 
         for ds in self.datasources:
-            for table in ds.schema.tables:
+            for table in ds.db_schema.tables:
                 score = self._score_table(table, query_lower)
                 results.append(
                     TableMatch(datasource_id=ds.datasource_id, table=table, score=score)
