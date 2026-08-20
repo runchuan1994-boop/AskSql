@@ -13,6 +13,7 @@ from app.core.database import get_connection
 from app.services import session_service
 from app.services.datasource_service import build_db_url, get_datasource
 from app.services.generation_log import log_generation
+from app.services.result_cache import result_cache
 
 
 # ---------------------------------------------------------------------------
@@ -212,13 +213,26 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
             }
 
         # 保存助手消息
-        session_service.add_message(
+        msg_result = session_service.add_message(
             session_id,
             "assistant",
             answer,
             sql_text=sql,
             result=result_data,
         )
+        msg_id = msg_result.get("id", "")
+
+        # 将全量结果存入缓存，供分页接口使用
+        if exec_result and success and exec_result.rows:
+            result_cache.set(
+                f"msg:{msg_id}",
+                {
+                    "columns": exec_result.columns,
+                    "rows": [list(r) for r in exec_result.rows],
+                    "row_count": exec_result.row_count,
+                    "success": exec_result.success,
+                },
+            )
 
         # 提取 intent summary
         intent_summary = ""
