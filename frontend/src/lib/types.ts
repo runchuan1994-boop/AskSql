@@ -36,6 +36,7 @@ export interface Message {
   content: string
   sql_text?: string | null
   result?: QueryResult | null
+  viz?: VizSpec | null
   created_at?: string
 }
 
@@ -88,6 +89,7 @@ export type SseEventType =
   | 'done'
   | 'chat_done'
   | 'heartbeat'
+  | 'viz_ready'
 
 export interface SseEvent {
   event: SseEventType
@@ -98,6 +100,7 @@ export interface FinalResultData {
   answer: string
   sql: string
   result?: QueryResult
+  viz?: VizSpec
 }
 
 // ---------- 思考阶段（用于 UI 进度展示） ----------
@@ -121,3 +124,35 @@ export const THINKING_STAGES: { key: ThinkingStage; label: string }[] = [
   { key: 'reflection', label: '反思优化' },
   { key: 'done', label: '完成' },
 ]
+
+// ---------- 可视化图表 ----------
+export type ChartType = 'line' | 'bar' | 'pie' | 'area' | 'metric' | 'table'
+
+export interface ChartSpec {
+  type: ChartType
+  title: string
+  description?: string
+  x_field?: string
+  y_field?: string
+  y_fields?: string[]
+  category_field?: string
+  value_field?: string
+  sort?: 'asc' | 'desc' | null
+  limit?: number
+  stacked?: boolean
+  config?: Record<string, unknown>
+}
+
+export interface VizSpec {
+  charts: ChartSpec[]
+}
+
+// 分页结果
+export interface PaginatedResult {
+  columns: string[]
+  rows: unknown[][]
+  page: number
+  page_size: number
+  total: number
+  has_more: boolean
+}
