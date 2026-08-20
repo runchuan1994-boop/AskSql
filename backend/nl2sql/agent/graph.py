@@ -13,6 +13,7 @@ from .nodes import (
     ask_clarify_node,
     generate_sql_node,
     execute_sql_node,
+    visualize_node,
     reflect_node,
     need_retry_conditional,
     summarize_node,
@@ -28,6 +29,8 @@ def build_graph() -> StateGraph:
                               ask_clarify  /  generate_sql
                                                       ↓
                                                 execute_sql
+                                                      ↓
+                                                 visualize
                                                       ↓
                                                   reflect
                                               ↙          ↘
@@ -46,6 +49,7 @@ def build_graph() -> StateGraph:
     graph.add_node("ask_clarify", ask_clarify_node)
     graph.add_node("generate_sql", generate_sql_node)
     graph.add_node("execute_sql", execute_sql_node)
+    graph.add_node("visualize", visualize_node)
     graph.add_node("reflect", reflect_node)
     graph.add_node("summarize", summarize_node)
 
@@ -71,8 +75,9 @@ def build_graph() -> StateGraph:
     # 边: generate_sql → execute_sql
     graph.add_edge("generate_sql", "execute_sql")
 
-    # 边: execute_sql → reflect
-    graph.add_edge("execute_sql", "reflect")
+    # 边: execute_sql → visualize → reflect
+    graph.add_edge("execute_sql", "visualize")
+    graph.add_edge("visualize", "reflect")
 
     # 条件边: reflect → generate_sql / summarize
     graph.add_conditional_edges(
@@ -137,6 +142,7 @@ class NL2SQLAgent:
             - answer: 最终回答（自然语言）
             - sql: 生成的 SQL
             - execution_result: 执行结果
+            - viz_spec: 可视化配置
             - intent: 意图分析结果
             - probe_findings: 探查发现
             - react_thoughts: 反思记录
@@ -168,6 +174,7 @@ class NL2SQLAgent:
             "answer": final_state.get("final_answer"),
             "sql": final_state.get("sql"),
             "execution_result": final_state.get("execution_result"),
+            "viz_spec": final_state.get("viz_spec"),
             "intent": final_state.get("intent"),
             "probe_findings": final_state.get("probe_findings", []),
             "react_thoughts": final_state.get("react_thoughts", []),

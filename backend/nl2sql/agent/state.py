@@ -46,6 +46,29 @@ class ReactThought(BaseModel):
     observation: str = ""
 
 
+class ChartSpec(BaseModel):
+    """单个图表配置."""
+
+    type: str  # line / bar / pie / area / metric / table
+    title: str
+    description: str = ""
+    x_field: Optional[str] = None
+    y_field: Optional[str] = None
+    y_fields: list[str] = Field(default_factory=list)
+    category_field: Optional[str] = None
+    value_field: Optional[str] = None
+    sort: Optional[str] = None  # asc / desc
+    limit: Optional[int] = None
+    stacked: bool = False
+    config: dict = Field(default_factory=dict)
+
+
+class VizSpec(BaseModel):
+    """可视化规范."""
+
+    charts: list[ChartSpec] = Field(default_factory=list)
+
+
 class AgentState(BaseModel):
     """LangGraph Agent 的状态。
 
@@ -79,6 +102,9 @@ class AgentState(BaseModel):
     max_iterations: int = 5
     satisfied: bool = False  # 反思是否满意
     needs_revision: bool = False  # 是否需要修正 SQL
+
+    # 可视化
+    viz_spec: Optional[dict] = None  # VizSpec dict: {charts: [...]}
 
     # 输出
     status: str = "thinking"  # thinking / clarifying / executing / done / failed
