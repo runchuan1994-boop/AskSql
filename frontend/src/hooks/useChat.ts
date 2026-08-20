@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getMessages, sendChatMessage } from '../lib/api'
-import type { Message, SseEvent, QueryResult, ThinkingStage } from '../lib/types'
+import type { Message, SseEvent, QueryResult, ThinkingStage, VizSpec } from '../lib/types'
 import { useSSE } from './useSSE'
 
 export interface UseChatReturn {
@@ -62,14 +62,26 @@ export function useChat(sessionId: string | null): UseChatReturn {
       case 'sql_executed':
         setCurrentStage('sql_executed')
         break
+      case 'viz_ready':
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (last && last.role === 'assistant' && !last.content) {
+            const vizData = evt.data as unknown as VizSpec
+            if (vizData.charts && vizData.charts.length > 0) {
+              return [...prev.slice(0, -1), { ...last, viz: vizData }]
+            }
+          }
+          return prev
+        })
+        break
       case 'reflection':
         setCurrentStage('reflection')
         break
-      case 'final_result':
-        // 追加助手消息
+      case 'final_result': {
         const answer = (evt.data.answer as string) || ''
         const sql = (evt.data.sql as string) || tempSqlRef.current
         const result = evt.data.result as QueryResult | undefined
+        const viz = evt.data.viz as VizSpec | undefined
         const assistantMsg: Message = {
           id: `assistant-${Date.now()}`,
           session_id: '',
@@ -77,12 +89,20 @@ export function useChat(sessionId: string | null): UseChatReturn {
           content: answer,
           sql_text: sql || null,
           result: result || null,
+          viz: viz || null,
           created_at: new Date().toISOString(),
         }
-        setMessages((prev) => [...prev, assistantMsg])
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (last && last.role === 'assistant' && !last.content) {
+            return [...prev.slice(0, -1), assistantMsg]
+          }
+          return [...prev, assistantMsg]
+        })
         setStreamingSql(null)
         tempSqlRef.current = ''
         break
+      }
       case 'error':
         setError((evt.data.message as string) || '发生错误')
         break
@@ -146,6 +166,16 @@ export function useChat(sessionId: string | null): UseChatReturn {
         created_at: new Date().toISOString(),
       }
       setMessages((prev) => [...prev, userMsg])
+
+      // 创建占位助手消息（内容会在 final_result 时填充）
+      const placeholderMsg: Message = {
+        id: `assistant-placeholder-${Date.now()}`,
+        session_id: sessionId,
+        role: 'assistant',
+        content: '',
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, placeholderMsg])
 
       try {
         // 启动 SSE 连接

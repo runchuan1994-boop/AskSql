@@ -7,6 +7,7 @@ import type {
   Message,
   DatasourceSchemaOverview,
   TableDetail,
+  PaginatedResult,
 } from './types'
 
 const BASE = '/api'
@@ -69,6 +70,17 @@ export async function sendChatMessage(
     method: 'POST',
     body: JSON.stringify({ session_id: sessionId, message }),
   })
+}
+
+// ---------- 分页结果 ----------
+export async function getResultPage(
+  messageId: string,
+  page: number,
+  pageSize = 100,
+): Promise<PaginatedResult> {
+  return request<PaginatedResult>(
+    `/chat/messages/${encodeURIComponent(messageId)}/result?page=${page}&page_size=${pageSize}`,
+  )
 }
 
 // ---------- Schema ----------

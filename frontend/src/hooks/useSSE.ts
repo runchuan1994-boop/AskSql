@@ -77,6 +77,7 @@ export function useSSE(
         'sql_execution_error',
         'sql_execution_failed',
         'reflection',
+        'viz_ready',
         'final_result',
         'error',
         'done',

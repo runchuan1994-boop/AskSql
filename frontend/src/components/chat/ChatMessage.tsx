@@ -5,6 +5,7 @@ import { User, Bot } from 'lucide-react'
 import type { Message } from '../../lib/types'
 import { SqlDisplay } from './SqlDisplay'
 import { ResultTable } from './ResultTable'
+import { ChartGrid } from '../chart/ChartGrid'
 import { clsx, formatTime } from '../../lib/utils'
 
 interface ChatMessageProps {
@@ -65,10 +66,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </div>
         )}
 
+        {/* 图表区域 */}
+        {message.viz && message.viz.charts.length > 0 && message.result && (
+          <div className="mt-3 w-full">
+            <ChartGrid viz={message.viz} result={message.result} />
+          </div>
+        )}
+
         {/* 查询结果表格 */}
         {message.result && message.result.rows && message.result.rows.length > 0 && (
           <div className="mt-3 w-full">
-            <ResultTable result={message.result} />
+            <ResultTable result={message.result} messageId={message.id} />
           </div>
         )}
       </div>
