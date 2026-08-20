@@ -59,15 +59,15 @@ SCHEMA_TOOLS_DEFINITION: list[dict] = [
 
 def _get_datasource(state: "AgentState", datasource_id: str | None = None):
     """Return the matching DatasourceSchema, or None."""
-    if not state.datasources:
+    if not state["datasources"]:
         return None
     if datasource_id:
-        for ds in state.datasources:
+        for ds in state["datasources"]:
             if ds.datasource_id == datasource_id:
                 return ds
         return None
     # default to first
-    return state.datasources[0]
+    return state["datasources"][0]
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Agent state and tool definitions."""
+"""NL2SQL Agent 模块。"""
 from .state import (
     AgentState,
     IntentResult,
@@ -14,6 +14,7 @@ from .tools import (
     describe_table,
     execute_sql,
 )
+from .graph import NL2SQLAgent, build_graph
 
 __all__ = [
     # state
@@ -29,4 +30,7 @@ __all__ = [
     "list_tables",
     "describe_table",
     "execute_sql",
+    # graph
+    "NL2SQLAgent",
+    "build_graph",
 ]

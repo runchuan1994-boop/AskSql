@@ -44,9 +44,9 @@ def _get_executor(state: "AgentState", datasource_id: str | None = None):
     if not executors:
         return None, "未配置数据源执行器 (datasource_executors)。"
 
-    ds_id = datasource_id or state.selected_datasource_id
-    if not ds_id and state.datasources:
-        ds_id = state.datasources[0].datasource_id
+    ds_id = datasource_id or state.get("selected_datasource_id")
+    if not ds_id and state["datasources"]:
+        ds_id = state["datasources"][0].datasource_id
 
     if not ds_id:
         return None, "未指定 datasource_id，且找不到可用的数据源。"
