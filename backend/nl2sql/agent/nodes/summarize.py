@@ -22,6 +22,8 @@ SUMMARIZE_SYSTEM_PROMPT = """你是一位数据分析师助手，负责将 SQL �
 3. 如果结果为空，如实说明，不要编造数据。
 4. 用用户的语言回答（如果用户用中文提问，就用中文回答）。
 5. 不要提及 SQL 或技术细节，直接给结论。
+6. 如果结果有图表展示，回答中可以自然地引导用户查看图表（例如"各月销量趋势如下图所示"）。
+7. 不要直接描述图表的技术细节，把重点放在数据洞察上。
 """
 
 
@@ -88,6 +90,7 @@ def summarize_node(state: dict) -> dict:
             "success": False,
             "sql": sql,
             "error": error_msg,
+            "viz": None,
         })
         _send_event(state, "done", {"status": "failed", "error": error_msg})
 
@@ -117,6 +120,15 @@ def summarize_node(state: dict) -> dict:
         "success": True,
         "sql": state.get("sql") or "",
         "row_count": exec_result.row_count,
+        "viz": state.get("viz_spec"),
+        "result": {
+            "columns": exec_result.columns,
+            "rows": [list(r) for r in exec_result.rows[:100]],
+            "row_count": exec_result.row_count,
+            "success": exec_result.success,
+            "duration_ms": getattr(exec_result, "duration_ms", None),
+            "truncated": len(exec_result.rows) < exec_result.row_count,
+        },
     })
     _send_event(state, "done", {"status": "done"})
 

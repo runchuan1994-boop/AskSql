@@ -208,6 +208,7 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
                 "row_count": exec_result.row_count,
                 "duration_ms": exec_result.duration_ms,
                 "truncated": exec_result.truncated,
+                "viz": result.get("viz_spec"),
             }
 
         # 保存助手消息
