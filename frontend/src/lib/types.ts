@@ -111,6 +111,7 @@ export type ThinkingStage =
   | 'sql_generated'
   | 'sql_executing'
   | 'sql_executed'
+  | 'visualizing'
   | 'reflection'
   | 'done'
 
@@ -121,6 +122,7 @@ export const THINKING_STAGES: { key: ThinkingStage; label: string }[] = [
   { key: 'sql_generated', label: '生成 SQL' },
   { key: 'sql_executing', label: '执行查询' },
   { key: 'sql_executed', label: '查询完成' },
+  { key: 'visualizing', label: '生成图表' },
   { key: 'reflection', label: '反思优化' },
   { key: 'done', label: '完成' },
 ]

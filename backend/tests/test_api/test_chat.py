@@ -360,3 +360,121 @@ class TestGenerationLogAfterChat:
             assert log["row_count"] == 1
             assert log["final_selected"] == 1
             assert log["iteration"] >= 1
+
+
+class TestPaginatedResultEndpoint:
+    """测试分页查询结果 API."""
+
+    def test_pagination_first_page(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            main_mod = _reload_app_modules(tmpdir)
+            from fastapi.testclient import TestClient
+            from app.services.result_cache import result_cache
+
+            # 手动写入缓存
+            rows = [[f"row{i}", i * 10] for i in range(250)]
+            result_cache.set(
+                "msg:test-msg-1",
+                {
+                    "columns": ["name", "value"],
+                    "rows": rows,
+                    "row_count": 250,
+                    "success": True,
+                },
+            )
+
+            client = TestClient(main_mod.app)
+            resp = client.get("/api/chat/messages/test-msg-1/result?page=1&page_size=10")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["columns"] == ["name", "value"]
+            assert len(data["rows"]) == 10
+            assert data["page"] == 1
+            assert data["page_size"] == 10
+            assert data["total"] == 250
+            assert data["has_more"] is True
+            assert data["rows"][0] == ["row0", 0]
+            assert data["rows"][9] == ["row9", 90]
+
+    def test_pagination_middle_page(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            main_mod = _reload_app_modules(tmpdir)
+            from fastapi.testclient import TestClient
+            from app.services.result_cache import result_cache
+
+            rows = [[f"row{i}", i] for i in range(100)]
+            result_cache.set(
+                "msg:test-msg-2",
+                {
+                    "columns": ["name", "val"],
+                    "rows": rows,
+                    "row_count": 100,
+                    "success": True,
+                },
+            )
+
+            client = TestClient(main_mod.app)
+            resp = client.get("/api/chat/messages/test-msg-2/result?page=3&page_size=10")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data["rows"]) == 10
+            assert data["page"] == 3
+            assert data["rows"][0] == ["row20", 20]
+            assert data["has_more"] is True
+
+    def test_pagination_last_page(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            main_mod = _reload_app_modules(tmpdir)
+            from fastapi.testclient import TestClient
+            from app.services.result_cache import result_cache
+
+            rows = [[i] for i in range(25)]
+            result_cache.set(
+                "msg:test-msg-3",
+                {
+                    "columns": ["n"],
+                    "rows": rows,
+                    "row_count": 25,
+                    "success": True,
+                },
+            )
+
+            client = TestClient(main_mod.app)
+            # 最后一页（page 3 of 3, page_size 10）
+            resp = client.get("/api/chat/messages/test-msg-3/result?page=3&page_size=10")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data["rows"]) == 5
+            assert data["has_more"] is False
+            assert data["total"] == 25
+
+    def test_pagination_not_found(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            main_mod = _reload_app_modules(tmpdir)
+            from fastapi.testclient import TestClient
+
+            client = TestClient(main_mod.app)
+            resp = client.get("/api/chat/messages/nonexistent/result?page=1&page_size=10")
+            assert resp.status_code == 404
+
+    def test_pagination_default_params(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            main_mod = _reload_app_modules(tmpdir)
+            from fastapi.testclient import TestClient
+            from app.services.result_cache import result_cache
+
+            rows = [[i] for i in range(150)]
+            result_cache.set(
+                "msg:test-msg-default",
+                {"columns": ["n"], "rows": rows, "row_count": 150, "success": True},
+            )
+
+            client = TestClient(main_mod.app)
+            # 不传参数，使用默认值
+            resp = client.get("/api/chat/messages/test-msg-default/result")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["page"] == 1
+            assert data["page_size"] == 100
+            assert len(data["rows"]) == 100
+            assert data["has_more"] is True

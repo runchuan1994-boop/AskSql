@@ -43,7 +43,7 @@ export function rowsToObjects(
 
 /**
  * 智能解析 X 轴字段
- * 优先级：chart.x_field > 第一列 > ''
+ * 优先级：chart.x_field > 日期/时间类列 > 第一列 > ''
  */
 export function resolveXField(
   chart: ChartSpec,
@@ -52,12 +52,17 @@ export function resolveXField(
   if (chart.x_field && columns.includes(chart.x_field)) {
     return chart.x_field
   }
+  // 智能寻找日期/时间类列作为 X 轴
+  const dateCol = columns.find((c) =>
+    /date|time|year|month|day|period|dt|created|updated/i.test(c),
+  )
+  if (dateCol) return dateCol
   return columns[0] ?? ''
 }
 
 /**
- * 智能解析 Y 轴字段
- * 优先级：chart.y_fields > chart.y_field > 除第一列外所有数值列 > 除第一列外所有列
+ * 智能解析 Y 轴数值字段
+ * 优先级：chart.y_fields > chart.y_field > 排除 ID/时间/分类后的列 > 除第一列外所有列
  */
 export function resolveYFields(
   chart: ChartSpec,
@@ -69,7 +74,13 @@ export function resolveYFields(
   if (chart.y_field && columns.includes(chart.y_field)) {
     return [chart.y_field]
   }
-  // 默认取除第一列（通常是类别/时间）以外的所有列
+  // 排除明显的非数值列（ID、时间、分类、名称类），剩下的作为 Y 轴
+  const nonValuePattern = /id|date|time|year|month|day|name|title|category|type|status|code$/i
+  const valueCols = columns.filter((c) => !nonValuePattern.test(c))
+  if (valueCols.length > 0) {
+    return valueCols
+  }
+  // 兜底：除第一列以外的所有列
   if (columns.length > 1) {
     return columns.slice(1)
   }

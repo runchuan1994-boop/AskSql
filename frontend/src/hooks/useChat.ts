@@ -63,6 +63,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
         setCurrentStage('sql_executed')
         break
       case 'viz_ready':
+        setCurrentStage('visualizing')
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (last && last.role === 'assistant' && !last.content) {
@@ -124,7 +125,18 @@ export function useChat(sessionId: string | null): UseChatReturn {
     setError(null)
     try {
       const msgs = await getMessages(sid)
-      setMessages(msgs)
+      // 后端把 viz 存在 result 里面，这里统一提升到顶层
+      // 保证前端可以统一用 message.viz 访问
+      const normalized = msgs.map((msg) => {
+        if (msg.viz) return msg
+        const resultViz = (msg.result as Record<string, unknown> | undefined)
+          ?.viz as VizSpec | undefined
+        if (resultViz?.charts?.length) {
+          return { ...msg, viz: resultViz }
+        }
+        return msg
+      })
+      setMessages(normalized)
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载消息失败')
       setMessages([])
