@@ -11,9 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Python 依赖
+# 安装 Python 依赖（使用清华镜像加速）
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir ".[dev]" uvicorn
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple ".[dev]" uvicorn
 
 # 复制代码
 COPY nl2sql/ ./nl2sql/
