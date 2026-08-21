@@ -62,6 +62,18 @@ export function useChat(sessionId: string | null): UseChatReturn {
       case 'sql_executed':
         setCurrentStage('sql_executed')
         break
+      case 'ds_creating':
+      case 'ds_created':
+      case 'ds_testing':
+        setCurrentStage('connecting_datasource')
+        break
+      case 'ds_connected':
+      case 'ds_importing':
+        setCurrentStage('importing_schema')
+        break
+      case 'ds_imported':
+        setCurrentStage('importing_schema')
+        break
       case 'viz_ready':
         setCurrentStage('visualizing')
         setMessages((prev) => {

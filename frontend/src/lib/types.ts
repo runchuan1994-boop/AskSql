@@ -83,6 +83,13 @@ export type SseEventType =
   | 'sql_executed'
   | 'sql_execution_error'
   | 'sql_execution_failed'
+  | 'ds_creating'
+  | 'ds_created'
+  | 'ds_testing'
+  | 'ds_connected'
+  | 'ds_connection_failed'
+  | 'ds_importing'
+  | 'ds_imported'
   | 'reflection'
   | 'final_result'
   | 'error'
@@ -111,6 +118,8 @@ export type ThinkingStage =
   | 'sql_generated'
   | 'sql_executing'
   | 'sql_executed'
+  | 'connecting_datasource'
+  | 'importing_schema'
   | 'visualizing'
   | 'reflection'
   | 'done'
@@ -122,6 +131,8 @@ export const THINKING_STAGES: { key: ThinkingStage; label: string }[] = [
   { key: 'sql_generated', label: '生成 SQL' },
   { key: 'sql_executing', label: '执行查询' },
   { key: 'sql_executed', label: '查询完成' },
+  { key: 'connecting_datasource', label: '连接数据源' },
+  { key: 'importing_schema', label: '导入 Schema' },
   { key: 'visualizing', label: '生成图表' },
   { key: 'reflection', label: '反思优化' },
   { key: 'done', label: '完成' },
