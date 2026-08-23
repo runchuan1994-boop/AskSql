@@ -129,7 +129,25 @@ def create_datasource(
     username: str = "",
     password: str = "",
 ) -> dict:
-    """创建数据源。"""
+    """创建数据源。
+
+    如果同一个项目下已存在完全相同的数据源
+    （type/host/port/database/username/password 全部一致），
+    则返回已有数据源，不重复创建。
+    """
+    # 先检查是否已存在相同的数据源
+    existing = _find_duplicate_datasource(
+        project_id=project_id,
+        ds_type=ds_type,
+        host=host,
+        port=port,
+        database=database,
+        username=username,
+        password=password,
+    )
+    if existing:
+        return existing
+
     ds_id = _generate_short_id()
     encrypted_pw = encrypt_password(password)
 
@@ -162,6 +180,48 @@ def create_datasource(
     result = get_datasource(ds_id)
     assert result is not None
     return result
+
+
+def _find_duplicate_datasource(
+    project_id: str,
+    ds_type: str,
+    host: str = "",
+    port: int | None = None,
+    database: str = "",
+    username: str = "",
+    password: str = "",
+) -> dict | None:
+    """查找是否已有相同的数据源（所有连接参数一致）。
+
+    通过逐条比对密码来判断（因为密码是加密存储的，不能直接 SQL 比较）。
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT * FROM datasources
+               WHERE project_id = ?
+                 AND type = ?
+                 AND COALESCE(host, '') = ?
+                 AND COALESCE(port, 0) = COALESCE(?, 0)
+                 AND COALESCE(database, '') = ?
+                 AND COALESCE(username, '') = ?
+               ORDER BY created_at ASC
+               LIMIT 10""",
+            (project_id, ds_type, host, port, database, username),
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    # 逐条验证密码
+    for row in rows:
+        encrypted = row["password_encrypted"] or ""
+        decrypted = decrypt_password(encrypted)
+        if decrypted == password:
+            return _row_to_dict(row)
+
+    return None
 
 
 def update_datasource(datasource_id: str, **kwargs) -> dict | None:

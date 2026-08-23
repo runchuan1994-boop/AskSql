@@ -16,7 +16,7 @@ def get_project_schemas(project_id: str) -> list[dict]:
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "SELECT id, name, type, schema_file FROM datasources WHERE project_id = ? ORDER BY created_at",
+            "SELECT id, name, type, host, port, database, schema_file FROM datasources WHERE project_id = ? ORDER BY created_at",
             (project_id,),
         )
         rows = cursor.fetchall()
@@ -29,6 +29,9 @@ def get_project_schemas(project_id: str) -> list[dict]:
         ds_id = row["id"]
         ds_name = row["name"]
         ds_type = row["type"]
+        ds_host = row["host"] or ""
+        ds_port = row["port"]
+        ds_database = row["database"] or ""
         schema_file = row["schema_file"]
 
         if not schema_file:
@@ -36,6 +39,9 @@ def get_project_schemas(project_id: str) -> list[dict]:
                 "datasource_id": ds_id,
                 "datasource_name": ds_name,
                 "datasource_type": ds_type,
+                "host": ds_host,
+                "port": ds_port,
+                "database": ds_database,
                 "note": "尚未导入 schema",
             })
             continue
@@ -54,6 +60,9 @@ def get_project_schemas(project_id: str) -> list[dict]:
                 "datasource_id": ds_schema.datasource_id or ds_id,
                 "datasource_name": ds_schema.datasource_name or ds_name,
                 "datasource_type": ds_schema.datasource_type or ds_type,
+                "host": ds_host,
+                "port": ds_port,
+                "database": ds_database,
                 "tables": tables,
             })
         except Exception:
@@ -61,6 +70,9 @@ def get_project_schemas(project_id: str) -> list[dict]:
                 "datasource_id": ds_id,
                 "datasource_name": ds_name,
                 "datasource_type": ds_type,
+                "host": ds_host,
+                "port": ds_port,
+                "database": ds_database,
                 "note": "尚未导入 schema",
             })
 

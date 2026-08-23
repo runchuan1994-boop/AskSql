@@ -1,6 +1,8 @@
 """SQL executor factory."""
 from __future__ import annotations
 
+import os
+
 from .base import SQLExecutor
 from .generic_executor import GenericSQLExecutor
 
@@ -14,8 +16,22 @@ def create_executor(
 ) -> SQLExecutor:
     """Create a SQL executor based on datasource type.
 
-    In V1, all datasource types use GenericSQLExecutor.
+    如果启用了沙盒（SANDBOX_ENABLED=true），返回 SandboxExecutor，
+    所有 SQL 在隔离的 Docker 容器里执行。
+    否则返回 GenericSQLExecutor（本地执行）。
     """
+    sandbox_enabled = os.getenv("SANDBOX_ENABLED", "false").lower() in ("true", "1", "yes")
+
+    if sandbox_enabled:
+        # 延迟导入，避免没有 docker 依赖时 import 失败
+        from sandbox.executor import SandboxExecutor
+        return SandboxExecutor(
+            datasource_id=datasource_id,
+            datasource_type=datasource_type,
+            db_url=db_url,
+            timeout_seconds=timeout_seconds,
+        )
+
     return GenericSQLExecutor(
         datasource_id=datasource_id,
         db_url=db_url,

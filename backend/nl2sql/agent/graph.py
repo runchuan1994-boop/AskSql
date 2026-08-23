@@ -8,6 +8,7 @@ from langgraph.graph import StateGraph, END
 from .nodes import (
     intent_analyze_node,
     intent_probe_node,
+    query_rewrite_node,
     clarify_node,
     need_clarify_conditional,
     ask_clarify_node,
@@ -17,24 +18,46 @@ from .nodes import (
     reflect_node,
     need_retry_conditional,
     summarize_node,
+    connect_datasource_node,
 )
 
 
+def route_after_clarify(state: dict) -> str:
+    """clarify 节点后的路由：先判断是否需要澄清，再根据意图类型分流。
+
+    返回:
+        "ask_clarify" — 需要用户澄清
+        "connect_datasource" — 连接数据源意图
+        "generate_sql" — 普通查询意图
+    """
+    # 优先判断是否需要澄清（两类意图都可能需要澄清）
+    if state.get("awaiting_clarification", False) and state.get("clarification_questions", []):
+        return "ask_clarify"
+
+    # 根据意图类型分流
+    intent = state.get("intent")
+    if intent and getattr(intent, "action", None) == "connect_datasource":
+        return "connect_datasource"
+
+    return "generate_sql"
+
+
 def build_graph() -> StateGraph:
-    """构建 NL2SQL Agent 的 LangGraph 状态图。
+    r"""构建 NL2SQL Agent 的 LangGraph 状态图。
 
     图结构:
-        intent_analyze → intent_probe → clarify
-                                            ↓
-                              ask_clarify  /  generate_sql
-                                                      ↓
-                                                execute_sql
-                                                      ↓
-                                                 visualize
-                                                      ↓
-                                                  reflect
-                                              ↙          ↘
-                                   generate_sql (重试)   summarize → END
+        intent_analyze -> intent_probe -> query_rewrite -> clarify
+                                                               |
+                                            ask_clarify  /  connect_datasource -> END
+                                                         \  generate_sql
+                                                                         |
+                                                                   execute_sql
+                                                                         |
+                                                                    visualize
+                                                                         |
+                                                                      reflect
+                                                                  /          \
+                                                       generate_sql (重试)   summarize -> END
     """
     from .state import AgentState
 
@@ -45,8 +68,10 @@ def build_graph() -> StateGraph:
     # 添加节点
     graph.add_node("intent_analyze", intent_analyze_node)
     graph.add_node("intent_probe", intent_probe_node)
+    graph.add_node("query_rewrite", query_rewrite_node)
     graph.add_node("clarify", clarify_node)
     graph.add_node("ask_clarify", ask_clarify_node)
+    graph.add_node("connect_datasource", connect_datasource_node)
     graph.add_node("generate_sql", generate_sql_node)
     graph.add_node("execute_sql", execute_sql_node)
     graph.add_node("visualize", visualize_node)
@@ -59,18 +84,23 @@ def build_graph() -> StateGraph:
     # 边: 意图分析 → 意图探查
     graph.add_edge("intent_analyze", "intent_probe")
 
-    # 边: 意图探查 → 澄清判断
-    graph.add_edge("intent_probe", "clarify")
+    # 边: 意图探查 → 查询改写 → 澄清判断
+    graph.add_edge("intent_probe", "query_rewrite")
+    graph.add_edge("query_rewrite", "clarify")
 
-    # 条件边: 澄清判断 → ask_clarify / generate_sql
+    # 条件边: 澄清判断 → ask_clarify / connect_datasource / generate_sql
     graph.add_conditional_edges(
         "clarify",
-        need_clarify_conditional,
+        route_after_clarify,
         {
             "ask_clarify": "ask_clarify",
+            "connect_datasource": "connect_datasource",
             "generate_sql": "generate_sql",
         },
     )
+
+    # 边: connect_datasource → END（节点内部完成创建/测试/导入/总结）
+    graph.add_edge("connect_datasource", END)
 
     # 边: generate_sql → execute_sql
     graph.add_edge("generate_sql", "execute_sql")
@@ -130,12 +160,18 @@ class NL2SQLAgent:
         self._graph = build_graph()
         self._app = self._graph.compile()
 
-    def run(self, user_query: str, conversation_history: list | None = None) -> dict:
+    def run(
+        self,
+        user_query: str,
+        conversation_history: list | None = None,
+        selected_datasource_id: str | None = None,
+    ) -> dict:
         """运行一次完整的 Agent 流程（同步版本）。
 
         Args:
             user_query: 用户的自然语言问题
             conversation_history: 历史对话消息列表
+            selected_datasource_id: 可选，用户指定的数据源 ID（优先使用）
 
         Returns:
             结果字典，包含:
@@ -162,6 +198,7 @@ class NL2SQLAgent:
             max_iterations=self.max_iterations,
             max_probe_iterations=self.max_probe_iterations,
             event_callback=self.event_callback,
+            selected_datasource_id=selected_datasource_id,
         )
         initial_state = state_obj.model_dump(exclude={"datasource_executors", "event_callback"}, mode="python")
         initial_state["datasource_executors"] = self.executors
@@ -181,9 +218,24 @@ class NL2SQLAgent:
             "iteration": final_state.get("iteration", 0),
             "status": final_state.get("status", "unknown"),
             "error": final_state.get("error"),
+            # 澄清相关
+            "clarification_questions": final_state.get("clarification_questions", []),
+            "awaiting_clarification": final_state.get("awaiting_clarification", False),
+            # 查询改写相关
+            "original_query": final_state.get("original_query"),
+            "rewritten_query": final_state.get("rewritten_query"),
+            "query_assumptions": final_state.get("query_assumptions", []),
+            # 数据源连接结果
+            "datasource_id": final_state.get("datasource_id"),
+            "tables_imported": final_state.get("tables_imported", 0),
         }
 
-    def stream(self, user_query: str, conversation_history: list | None = None):
+    def stream(
+        self,
+        user_query: str,
+        conversation_history: list | None = None,
+        selected_datasource_id: str | None = None,
+    ):
         """流式运行 Agent，yield 每个节点的状态更新。"""
         from .state import AgentState
 
@@ -195,6 +247,7 @@ class NL2SQLAgent:
             max_iterations=self.max_iterations,
             max_probe_iterations=self.max_probe_iterations,
             event_callback=self.event_callback,
+            selected_datasource_id=selected_datasource_id,
         )
         initial_state = state_obj.model_dump(exclude={"datasource_executors", "event_callback"}, mode="python")
         initial_state["datasource_executors"] = self.executors

@@ -9,3 +9,27 @@ __pycache__/
 data/
 .env
 .env.local
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Claude / Superpowers local config
+.claude/
+.superpowers/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test output / logs
+*.log
+backend/tests/test_prompts_runner.py
+
+# Sandbox runtime data
+backend/sandbox/
+backend/config/schemas/*/
+!backend/config/schemas/.gitkeep

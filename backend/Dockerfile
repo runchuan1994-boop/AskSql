@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -13,11 +13,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 安装 Python 依赖（使用清华镜像加速）
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple ".[dev]" uvicorn
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple ".[dev,sandbox]" uvicorn
+
+# 预装常见数据库驱动（主进程也能直接连接常用数据库）
+# 更少见的数据库仍然可以通过沙盒动态安装驱动
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    psycopg2-binary \
+    mysql-connector-python \
+    pymysql
 
 # 复制代码
 COPY nl2sql/ ./nl2sql/
 COPY app/ ./app/
+COPY sandbox/ ./sandbox/
 COPY config/ ./config/
 COPY tests/ ./tests/
 

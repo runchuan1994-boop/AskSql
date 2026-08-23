@@ -61,10 +61,13 @@ def _make_mock_llm(responses: list[str]) -> MagicMock:
 def _patch_llm_clients(mock_llm: MagicMock):
     """Context manager: mock 所有 agent 节点模块的 create_llm_client."""
     patches = [
+        patch("nl2sql.agent.dispatcher.create_llm_client", return_value=mock_llm),
         patch("nl2sql.agent.nodes.intent.create_llm_client", return_value=mock_llm),
         patch("nl2sql.agent.nodes.probe.create_llm_client", return_value=mock_llm),
+        patch("nl2sql.agent.nodes.rewrite.create_llm_client", return_value=mock_llm),
         patch("nl2sql.agent.nodes.clarify.create_llm_client", return_value=mock_llm),
         patch("nl2sql.agent.nodes.generate.create_llm_client", return_value=mock_llm),
+        patch("nl2sql.agent.nodes.visualize.create_llm_client", return_value=mock_llm),
         patch("nl2sql.agent.nodes.reflect.create_llm_client", return_value=mock_llm),
         patch("nl2sql.agent.nodes.summarize.create_llm_client", return_value=mock_llm),
     ]
@@ -78,9 +81,20 @@ def _patch_llm_clients(mock_llm: MagicMock):
 
 
 def _success_responses() -> list[str]:
-    """返回一个标准成功流程的 LLM 响应列表."""
+    """返回一个标准成功流程的 LLM 响应列表.
+
+    调用顺序（高置信度无歧义场景）：
+    1. dispatcher 意图分类
+    2. intent_analyze → probe(skip) → query_rewrite(skip) → clarify(fast-path skip)
+    3. generate_sql
+    4. visualize
+    5. reflect
+    6. summarize
+    """
     return [
-        # 1. intent_analyze
+        # 1. dispatcher 意图分类
+        json.dumps({"intent": "query", "confidence": 0.9, "reasoning": "用户想查询数据"}),
+        # 2. intent_analyze
         json.dumps({
             "tables": [{"name": "users", "reason": "统计用户"}],
             "filters": [],
@@ -90,18 +104,18 @@ def _success_responses() -> list[str]:
             "confidence": 0.95,
             "analysis": "用户想统计用户总数",
         }),
-        # 2. clarify
-        "[]",
         # 3. generate_sql
         "```sql\nSELECT COUNT(*) as total FROM users\n```",
-        # 4. reflect (satisfied)
+        # 4. visualize
+        json.dumps({"charts": [{"type": "metric", "title": "用户总数", "value_field": "total"}]}),
+        # 5. reflect (satisfied)
         json.dumps({
             "satisfied": True,
             "needs_revision": False,
             "thought": "SQL 正确执行，结果符合用户问题",
             "suggested_fix": "",
         }),
-        # 5. summarize
+        # 6. summarize
         "系统中共有 3 个用户。",
     ]
 

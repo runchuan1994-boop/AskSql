@@ -88,7 +88,14 @@ export function SchemaPanel({ projectId }: SchemaPanelProps) {
                 {/* 数据源 */}
                 <div className="px-3 py-1.5 flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   <Database size={14} />
-                  {ds.datasource_name}
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">{ds.datasource_name}</div>
+                    <div className="text-[10px] font-mono font-normal text-gray-400 normal-case truncate">
+                      {ds.datasource_type === 'sqlite'
+                        ? ds.database || ds.datasource_type
+                        : `${ds.host || 'localhost'}${ds.port ? `:${ds.port}` : ''}${ds.database ? `/${ds.database}` : ''}`}
+                    </div>
+                  </div>
                   <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded font-normal">
                     {ds.datasource_type}
                   </span>

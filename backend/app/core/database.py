@@ -108,6 +108,40 @@ def init_db() -> None:
             )
         """)
 
+        # Agent 步骤耗时日志（细粒度，记录每个节点/工具调用的时间）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS agent_step_logs (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                project_id TEXT,
+                agent_type TEXT NOT NULL,
+                step_name TEXT NOT NULL,
+                step_type TEXT NOT NULL,
+                iteration INTEGER DEFAULT 0,
+                start_time DATETIME NOT NULL,
+                end_time DATETIME,
+                duration_ms INTEGER,
+                tool_name TEXT,
+                tool_args_json TEXT,
+                success INTEGER,
+                error_message TEXT,
+                token_input INTEGER,
+                token_output INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
+            )
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_agent_step_logs_session
+            ON agent_step_logs(session_id)
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_agent_step_logs_agent
+            ON agent_step_logs(agent_type, step_name)
+        """)
+
         conn.commit()
     finally:
         conn.close()

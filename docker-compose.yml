@@ -17,9 +17,20 @@ services:
       - APP_DATA_DIR=/app/data
       - APP_SCHEMAS_DIR=/app/config/schemas
       - APP_PROJECTS_DIR=/app/config/projects
+      # 沙盒配置
+      - SANDBOX_ENABLED=${SANDBOX_ENABLED:-false}
+      - SANDBOX_RUNTIME=${SANDBOX_RUNTIME:-runc}
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-nl2sql-sandbox:latest}
+      - SANDBOX_MEMORY=${SANDBOX_MEMORY:-256m}
+      - SANDBOX_CPU=${SANDBOX_CPU:-0.5}
+      - SANDBOX_TIMEOUT=${SANDBOX_TIMEOUT:-30}
+      - SANDBOX_POOL_MAX=${SANDBOX_POOL_MAX:-4}
+      - SANDBOX_NETWORK=${SANDBOX_NETWORK:-false}
     volumes:
       - ./backend/data:/app/data
       - ./backend/config:/app/config
+      # 挂载 Docker socket，让主服务能创建沙盒容器
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
   frontend:
@@ -31,3 +42,24 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: nl2sql-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=finance_db
+      - POSTGRES_USER=nl2sql
+      - POSTGRES_PASSWORD=nl2sql123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nl2sql -d finance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

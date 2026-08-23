@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 from nl2sql.llm import Message, MessageRole
 from nl2sql.llm.factory import create_llm_client
 
+from ._step_utils import step_start, step_complete, step_error
+
 if TYPE_CHECKING:
     from ..state import AgentState
 
@@ -169,17 +171,34 @@ def visualize_node(state: dict) -> dict:
     Returns:
         dict with viz_spec (dict or None)
     """
-    exec_result = state.get("execution_result")
-    if exec_result is None or not exec_result.success:
-        return {"viz_spec": None}
-    if not exec_result.rows or exec_result.row_count == 0:
-        return {"viz_spec": None}
+    t0 = step_start(state, "visualize", "生成图表")
 
-    data_preview = _build_data_preview(exec_result, max_rows=30)
-    sql = state.get("sql") or ""
-    user_query = state.get("user_query") or ""
+    try:
+        exec_result = state.get("execution_result")
+        if exec_result is None or not exec_result.success:
+            step_complete(state, "visualize", "生成图表", {
+                "chart_count": 0,
+                "chart_types": [],
+                "titles": [],
+                "skipped": True,
+                "reason": "无执行结果",
+            }, t0)
+            return {"viz_spec": None}
+        if not exec_result.rows or exec_result.row_count == 0:
+            step_complete(state, "visualize", "生成图表", {
+                "chart_count": 0,
+                "chart_types": [],
+                "titles": [],
+                "skipped": True,
+                "reason": "结果为空",
+            }, t0)
+            return {"viz_spec": None}
 
-    user_msg = f"""用户查询：{user_query}
+        data_preview = _build_data_preview(exec_result, max_rows=30)
+        sql = state.get("sql") or ""
+        user_query = state.get("user_query") or ""
+
+        user_msg = f"""用户查询：{user_query}
 
 SQL：
 ```sql
@@ -191,25 +210,49 @@ SQL：
 
 请分析以上内容，选择最合适的图表展示形式。输出 JSON 格式。"""
 
-    messages = [
-        Message(role=MessageRole.SYSTEM, content=VISUALIZE_SYSTEM_PROMPT),
-        Message(role=MessageRole.USER, content=user_msg),
-    ]
+        messages = [
+            Message(role=MessageRole.SYSTEM, content=VISUALIZE_SYSTEM_PROMPT),
+            Message(role=MessageRole.USER, content=user_msg),
+        ]
 
-    try:
-        llm = create_llm_client()
-        response = llm.chat(messages, temperature=0.2)
-        content = response.content.strip()
-        parsed = _extract_json(content)
-        if parsed is None:
-            _send_event(state, "viz_ready", {"charts": [], "note": "parse_failed"})
+        try:
+            llm = create_llm_client()
+            response = llm.chat(messages, temperature=0.2)
+            content = response.content.strip()
+            parsed = _extract_json(content)
+            if parsed is None:
+                _send_event(state, "viz_ready", {"charts": [], "note": "parse_failed"})
+                step_complete(state, "visualize", "生成图表", {
+                    "chart_count": 0,
+                    "chart_types": [],
+                    "titles": [],
+                    "note": "parse_failed",
+                }, t0)
+                return {"viz_spec": None}
+            viz_spec = _validate_viz_spec(parsed)
+            if viz_spec is None:
+                _send_event(state, "viz_ready", {"charts": [], "note": "invalid"})
+                step_complete(state, "visualize", "生成图表", {
+                    "chart_count": 0,
+                    "chart_types": [],
+                    "titles": [],
+                    "note": "invalid",
+                }, t0)
+                return {"viz_spec": None}
+            _send_event(state, "viz_ready", viz_spec)
+
+            chart_types = [c["type"] for c in viz_spec["charts"]]
+            chart_titles = [c["title"] for c in viz_spec["charts"]]
+            step_complete(state, "visualize", "生成图表", {
+                "chart_count": len(viz_spec["charts"]),
+                "chart_types": chart_types,
+                "titles": chart_titles,
+            }, t0)
+            return {"viz_spec": viz_spec}
+        except Exception as e:
+            _send_event(state, "viz_ready", {"charts": [], "note": f"error: {str(e)}"})
+            step_error(state, "visualize", "生成图表", str(e), t0)
             return {"viz_spec": None}
-        viz_spec = _validate_viz_spec(parsed)
-        if viz_spec is None:
-            _send_event(state, "viz_ready", {"charts": [], "note": "invalid"})
-            return {"viz_spec": None}
-        _send_event(state, "viz_ready", viz_spec)
-        return {"viz_spec": viz_spec}
     except Exception as e:
-        _send_event(state, "viz_ready", {"charts": [], "note": f"error: {str(e)}"})
-        return {"viz_spec": None}
+        step_error(state, "visualize", "生成图表", str(e), t0)
+        raise

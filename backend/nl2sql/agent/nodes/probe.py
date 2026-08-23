@@ -8,6 +8,7 @@ from nl2sql.llm.factory import create_llm_client
 from nl2sql.agent.tools.probe_tools import PROBE_TOOLS_DEFINITION, PROBE_TOOL_FUNCTIONS
 
 from ..state import ProbeFinding
+from ._step_utils import step_start, step_complete, step_error
 
 if TYPE_CHECKING:
     from ..state import AgentState
@@ -68,27 +69,38 @@ def intent_probe_node(state: dict) -> dict:
     Returns:
         dict with probe_findings list and probe_iteration
     """
-    intent = state.get("intent")
-    ambiguities = intent.ambiguities if intent else []
+    t0 = step_start(state, "intent_probe", "数据探查")
 
-    # Skip if no ambiguities or max iterations reached
-    if not ambiguities or state.get("probe_iteration", 0) >= state.get("max_probe_iterations", 3):
-        return {
-            "probe_findings": state.get("probe_findings", []),
-            "probe_iteration": state.get("probe_iteration", 0) + 1,
-        }
+    try:
+        intent = state.get("intent")
+        ambiguities = intent.ambiguities if intent else []
 
-    schema_info = _build_schema_for_probe(state)
+        # Skip if no ambiguities or max iterations reached
+        if not ambiguities or state.get("probe_iteration", 0) >= state.get("max_probe_iterations", 3):
+            step_complete(state, "intent_probe", "数据探查", {
+                "probed_tables": [],
+                "findings_count": 0,
+                "findings": [],
+                "skipped": True,
+                "reason": "无歧义或已达最大迭代次数",
+            }, t0)
+            return {
+                "probe_findings": state.get("probe_findings", []),
+                "probe_iteration": state.get("probe_iteration", 0) + 1,
+            }
 
-    # Build previous findings context
-    prev_findings = ""
-    if state.get("probe_findings", []):
-        lines = ["已有的探查发现："]
-        for f in state.get("probe_findings", []):
-            lines.append(f"- {f.action}({f.table}): {f.finding}")
-        prev_findings = "\n".join(lines) + "\n\n"
+        schema_info = _build_schema_for_probe(state)
 
-    user_msg = f"""{prev_findings}用户查询：{state["user_query"]}
+        # Build previous findings context
+        prev_findings = ""
+        if state.get("probe_findings", []):
+            lines = ["已有的探查发现："]
+            for f in state.get("probe_findings", []):
+                lines.append(f"- {f.action}({f.table}): {f.finding}")
+            prev_findings = "\n".join(lines) + "\n\n"
+
+        user_query = state["user_query"]
+        user_msg = f"""{prev_findings}用户查询：{user_query}
 
 意图分析发现的歧义：
 {chr(10).join(f"- {a}" for a in ambiguities)}
@@ -98,61 +110,74 @@ def intent_probe_node(state: dict) -> dict:
 请判断是否需要进行数据探查来消除技术层面的歧义。
 如果需要，请调用合适的探查工具。如果不需要，直接回复"无需探查"。"""
 
-    messages = [
-        Message(role=MessageRole.SYSTEM, content=PROBE_SYSTEM_PROMPT),
-        Message(role=MessageRole.USER, content=user_msg),
-    ]
+        messages = [
+            Message(role=MessageRole.SYSTEM, content=PROBE_SYSTEM_PROMPT),
+            Message(role=MessageRole.USER, content=user_msg),
+        ]
 
-    llm = create_llm_client()
-    response = llm.chat(
-        messages,
-        tools=PROBE_TOOLS_DEFINITION,
-        temperature=0.0,
-    )
+        llm = create_llm_client()
+        response = llm.chat(
+            messages,
+            tools=PROBE_TOOLS_DEFINITION,
+            temperature=0.0,
+        )
 
-    new_findings = list(state.get("probe_findings", []))
+        new_findings = list(state.get("probe_findings", []))
 
-    # Execute tool calls if any
-    if response.tool_calls:
-        for tool_call in response.tool_calls:
-            func_name = tool_call.name
-            func = PROBE_TOOL_FUNCTIONS.get(func_name)
-            if func is None:
-                continue
+        # Execute tool calls if any
+        if response.tool_calls:
+            for tool_call in response.tool_calls:
+                func_name = tool_call.name
+                func = PROBE_TOOL_FUNCTIONS.get(func_name)
+                if func is None:
+                    continue
 
-            # Determine datasource_id
-            args = dict(tool_call.arguments)
-            ds_id = args.pop("datasource_id", None) or state.get("selected_datasource_id")
+                # Determine datasource_id
+                args = dict(tool_call.arguments)
+                ds_id = args.pop("datasource_id", None) or state.get("selected_datasource_id")
 
-            try:
-                result_str = func(state, **args)
-                table_name = args.get("table_name", "unknown")
+                try:
+                    result_str = func(state, **args)
+                    table_name = args.get("table_name", "unknown")
 
-                new_findings.append(ProbeFinding(
-                    action=func_name,
-                    table=table_name,
-                    datasource_id=ds_id or (state["datasources"][0].datasource_id if state["datasources"] else ""),
-                    finding=result_str,
-                    sql="",
-                ))
-            except Exception as e:
-                new_findings.append(ProbeFinding(
-                    action=func_name,
-                    table=args.get("table_name", "unknown"),
-                    datasource_id=ds_id or "",
-                    finding=f"探查失败: {e}",
-                    sql="",
-                ))
+                    new_findings.append(ProbeFinding(
+                        action=func_name,
+                        table=table_name,
+                        datasource_id=ds_id or (state["datasources"][0].datasource_id if state["datasources"] else ""),
+                        finding=result_str,
+                        sql="",
+                    ))
+                except Exception as e:
+                    new_findings.append(ProbeFinding(
+                        action=func_name,
+                        table=args.get("table_name", "unknown"),
+                        datasource_id=ds_id or "",
+                        finding=f"探查失败: {e}",
+                        sql="",
+                    ))
 
-    _send_event(state, "intent_probe", {
-        "findings_count": len(new_findings) - len(state.get("probe_findings", [])),
-        "findings": [
-            {"action": f.action, "table": f.table, "finding": f.finding[:200]}
-            for f in new_findings[len(state.get("probe_findings", [])):]
-        ],
-    })
+        new_count = len(new_findings) - len(state.get("probe_findings", []))
+        new_finding_objs = new_findings[len(state.get("probe_findings", [])):]
 
-    return {
-        "probe_findings": new_findings,
-        "probe_iteration": state.get("probe_iteration", 0) + 1,
-    }
+        _send_event(state, "intent_probe", {
+            "findings_count": new_count,
+            "findings": [
+                {"action": f.action, "table": f.table, "finding": f.finding[:200]}
+                for f in new_finding_objs
+            ],
+        })
+
+        probed_tables = list({f.table for f in new_finding_objs})
+        step_complete(state, "intent_probe", "数据探查", {
+            "probed_tables": probed_tables,
+            "findings_count": new_count,
+            "findings": [f.finding[:200] for f in new_finding_objs],
+        }, t0)
+
+        return {
+            "probe_findings": new_findings,
+            "probe_iteration": state.get("probe_iteration", 0) + 1,
+        }
+    except Exception as e:
+        step_error(state, "intent_probe", "数据探查", str(e), t0)
+        raise

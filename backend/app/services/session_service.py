@@ -135,7 +135,10 @@ def add_message(
 ) -> dict:
     """添加一条消息，同时更新会话的 updated_at."""
     msg_id = str(uuid.uuid4())
-    result_json = json.dumps(result, ensure_ascii=False) if result is not None else None
+    result_json = json.dumps(result, ensure_ascii=False, default=str) if result is not None else None
+    # 防御：确保 content 是字符串
+    if content is None:
+        content = ""
 
     conn = get_connection()
     try:

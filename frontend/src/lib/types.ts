@@ -38,6 +38,28 @@ export interface Message {
   result?: QueryResult | null
   viz?: VizSpec | null
   created_at?: string
+  /** 澄清相关（仅 assistant 消息，处于澄清状态时有） */
+  clarification?: {
+    questions: string[]
+    resolved?: boolean
+  }
+  /** 查询改写时做出的合理假设列表（减少澄清时展示） */
+  query_assumptions?: string[]
+}
+
+// ---------- 数据源 ----------
+export interface Datasource {
+  id: string
+  project_id: string
+  name: string
+  type: string
+  host: string
+  port: number | null
+  database: string
+  username: string
+  schema_file: string
+  created_at?: string
+  updated_at?: string
 }
 
 // ---------- Schema ----------
@@ -51,6 +73,9 @@ export interface DatasourceSchemaOverview {
   datasource_id: string
   datasource_name: string
   datasource_type: string
+  host: string
+  port: number | null
+  database: string
   tables?: SchemaTable[]
   note?: string
 }
@@ -75,8 +100,11 @@ export interface TableDetail {
 // ---------- SSE 事件 ----------
 export type SseEventType =
   | 'start'
+  | 'dispatch_started'
+  | 'dispatch_result'
   | 'intent_analysis'
   | 'intent_probe'
+  | 'query_rewrite'
   | 'clarification_needed'
   | 'sql_generated'
   | 'sql_executing'
@@ -85,11 +113,18 @@ export type SseEventType =
   | 'sql_execution_failed'
   | 'ds_creating'
   | 'ds_created'
+  | 'ds_create_failed'
   | 'ds_testing'
   | 'ds_connected'
   | 'ds_connection_failed'
   | 'ds_importing'
   | 'ds_imported'
+  | 'ds_import_failed'
+  | 'ds_connect_started'
+  | 'schema_exploring'
+  | 'schema_tool_call'
+  | 'schema_tool_result'
+  | 'schema_explore_done'
   | 'reflection'
   | 'final_result'
   | 'error'
@@ -97,6 +132,7 @@ export type SseEventType =
   | 'chat_done'
   | 'heartbeat'
   | 'viz_ready'
+  | 'step_detail'
 
 export interface SseEvent {
   event: SseEventType
@@ -112,31 +148,49 @@ export interface FinalResultData {
 
 // ---------- 思考阶段（用于 UI 进度展示） ----------
 export type ThinkingStage =
+  | 'dispatching'
   | 'intent_analysis'
   | 'intent_probe'
+  | 'query_rewrite'
   | 'clarification_needed'
   | 'sql_generated'
   | 'sql_executing'
   | 'sql_executed'
   | 'connecting_datasource'
   | 'importing_schema'
+  | 'schema_exploring'
   | 'visualizing'
   | 'reflection'
   | 'done'
 
 export const THINKING_STAGES: { key: ThinkingStage; label: string }[] = [
+  { key: 'dispatching', label: '分析任务' },
   { key: 'intent_analysis', label: '分析意图' },
   { key: 'intent_probe', label: '探查数据' },
+  { key: 'query_rewrite', label: '查询改写' },
   { key: 'clarification_needed', label: '需要澄清' },
   { key: 'sql_generated', label: '生成 SQL' },
   { key: 'sql_executing', label: '执行查询' },
   { key: 'sql_executed', label: '查询完成' },
   { key: 'connecting_datasource', label: '连接数据源' },
   { key: 'importing_schema', label: '导入 Schema' },
+  { key: 'schema_exploring', label: '探索 Schema' },
   { key: 'visualizing', label: '生成图表' },
   { key: 'reflection', label: '反思优化' },
   { key: 'done', label: '完成' },
 ]
+
+// ---------- 思考步骤（时间线展示） ----------
+export type StepStatus = 'pending' | 'active' | 'completed' | 'error'
+
+export interface ThinkingStep {
+  step: string
+  name: string
+  status: StepStatus
+  duration_ms?: number
+  detail?: Record<string, unknown>
+  error_message?: string
+}
 
 // ---------- 可视化图表 ----------
 export type ChartType = 'line' | 'bar' | 'pie' | 'area' | 'metric' | 'table'

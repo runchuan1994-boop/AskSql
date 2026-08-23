@@ -40,8 +40,13 @@ def _send_event_sync(session_id: str, event_type: str, data: dict) -> None:
         pass
 
 
-def _build_agent_sync(project_id: str, session_id: str, loop: asyncio.AbstractEventLoop):
-    """同步构建 NL2SQLAgent 实例（可以在任意线程调用）.
+def _build_dispatcher_sync(project_id: str, session_id: str, loop: asyncio.AbstractEventLoop):
+    """同步构建 DispatcherAgent 实例（可以在任意线程调用）.
+
+    Dispatcher 作为统一入口，会根据用户意图自动路由到：
+    - NL2SQLAgent（数据查询）
+    - SchemaExplorerAgent（schema 探索）
+    - DatasourceConnectorAgent（数据源接入）
 
     Args:
         project_id: 项目 ID
@@ -49,9 +54,9 @@ def _build_agent_sync(project_id: str, session_id: str, loop: asyncio.AbstractEv
         loop: 事件循环，用于 call_soon_threadsafe 发送事件
 
     Returns:
-        NL2SQLAgent 实例或 None
+        DispatcherAgent 实例
     """
-    from nl2sql.agent import NL2SQLAgent
+    from nl2sql.agent.dispatcher import DispatcherAgent
     from nl2sql.schema.loader import SchemaLoader
     from nl2sql.executor.factory import create_executor
 
@@ -66,9 +71,6 @@ def _build_agent_sync(project_id: str, session_id: str, loop: asyncio.AbstractEv
     finally:
         conn.close()
 
-    if not ds_ids:
-        return None
-
     # 加载每个数据源的 schema 和执行器
     loader = SchemaLoader()
     datasources = []
@@ -80,14 +82,12 @@ def _build_agent_sync(project_id: str, session_id: str, loop: asyncio.AbstractEv
             continue
 
         schema_file = ds.get("schema_file", "")
-        if not schema_file:
-            continue
-
-        try:
-            ds_schema = loader.load_from_yaml(schema_file)
-            datasources.append(ds_schema)
-        except (FileNotFoundError, Exception):
-            continue
+        if schema_file:
+            try:
+                ds_schema = loader.load_from_yaml(schema_file)
+                datasources.append(ds_schema)
+            except (FileNotFoundError, Exception):
+                pass
 
         db_url = build_db_url(ds)
         try:
@@ -101,9 +101,6 @@ def _build_agent_sync(project_id: str, session_id: str, loop: asyncio.AbstractEv
         except Exception:
             continue
 
-    if not datasources:
-        return None
-
     # event_callback: 从 agent 线程调用，用 call_soon_threadsafe 线程安全地发送事件
     def event_callback(event_type: str, data: dict) -> None:
         try:
@@ -111,7 +108,7 @@ def _build_agent_sync(project_id: str, session_id: str, loop: asyncio.AbstractEv
         except Exception:
             pass
 
-    agent = NL2SQLAgent(
+    dispatcher = DispatcherAgent(
         project_id=project_id,
         datasources=datasources,
         executors=executors,
@@ -120,7 +117,7 @@ def _build_agent_sync(project_id: str, session_id: str, loop: asyncio.AbstractEv
         max_probe_iterations=settings.agent_max_probe_iterations,
     )
 
-    return agent
+    return dispatcher
 
 
 def _load_history_messages_sync(session_id: str) -> list:
@@ -135,12 +132,13 @@ def _load_history_messages_sync(session_id: str) -> list:
             role = MessageRole(role_str)
         except ValueError:
             continue
-        content = msg.get("content", "")
+        content = msg.get("content") or ""
         history.append(Message(role=role, content=content))
     return history
 
 
-def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEventLoop) -> None:
+def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEventLoop,
+                   datasource_id: str | None = None) -> None:
     """同步运行整个聊天流程（在线程池中执行）.
 
     所有操作都在同一个线程中完成：
@@ -168,14 +166,8 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
     # 保存用户消息
     session_service.add_message(session_id, "user", user_query)
 
-    # 构建 agent
-    agent = _build_agent_sync(project_id, session_id, loop)
-    if agent is None:
-        loop.call_soon_threadsafe(
-            _send_event_sync, session_id, "chat_done",
-            {"status": "failed", "error": "没有可用的数据源或 schema"},
-        )
-        return
+    # 构建 dispatcher（统一入口，自动路由到对应子 Agent）
+    dispatcher = _build_dispatcher_sync(project_id, session_id, loop)
 
     # 加载历史消息
     history = _load_history_messages_sync(session_id)
@@ -183,8 +175,8 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
     start_time = time.perf_counter()
 
     try:
-        # 运行 agent（同步，已经在线程里了）
-        result = agent.run(user_query, history)
+        # 运行 dispatcher（同步，已经在线程里了）
+        result = dispatcher.run(user_query, history, datasource_id)
 
         execution_time_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -192,14 +184,19 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
         answer = result.get("answer", "")
         sql = result.get("sql", "")
         exec_result = result.get("execution_result")
-        intent = result.get("intent")
+        intent_obj = result.get("intent")  # 可能是 IntentResult 对象或字符串
         iteration = result.get("iteration", 0)
         react_thoughts = result.get("react_thoughts", [])
         status = result.get("status", "unknown")
         error = result.get("error")
+        intent_type = result.get("intent_type", "")
 
-        # 构建执行结果
+        # 构建执行结果（仅 query 类型有）
         success = exec_result is not None and exec_result.success if exec_result else False
+        # schema_exploration / connect_datasource 也视为成功如果 status 是 done
+        if not exec_result:
+            success = status == "done" and not error
+
         row_count = exec_result.row_count if exec_result and success else 0
         result_data = None
         if exec_result and success:
@@ -212,17 +209,40 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
                 "viz": result.get("viz_spec"),
             }
 
+        # 查询改写假设：保存到 result_data 中，供前端展示
+        query_assumptions = result.get("query_assumptions", []) or []
+        if query_assumptions and result_data is not None:
+            result_data["query_assumptions"] = query_assumptions
+
+        # 澄清状态：将澄清问题作为消息内容保存，方便用户刷新后仍可见
+        clarification_questions = result.get("clarification_questions", []) or []
+        if status == "clarifying" and clarification_questions:
+            # 构造友好的引导文本
+            q_list = "\n".join(
+                f"{i+1}. {q}" for i, q in enumerate(clarification_questions)
+            )
+            answer = f"为了更准确地帮你查询，需要先确认几个问题：\n\n{q_list}\n\n请在下方输入框中回复你的想法。"
+            result_data = {
+                "columns": ["问题"],
+                "rows": [[q] for q in clarification_questions],
+                "row_count": len(clarification_questions),
+                "duration_ms": 0,
+                "truncated": False,
+                "is_clarification": True,
+                "clarification_questions": clarification_questions,
+            }
+
         # 保存助手消息
         msg_result = session_service.add_message(
             session_id,
             "assistant",
             answer,
-            sql_text=sql,
+            sql_text=sql or None,
             result=result_data,
         )
         msg_id = msg_result.get("id", "")
 
-        # 将全量结果存入缓存，供分页接口使用
+        # 将全量结果存入缓存，供分页接口使用（仅查询有结果时）
         if exec_result and success and exec_result.rows:
             result_cache.set(
                 f"msg:{msg_id}",
@@ -236,10 +256,14 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
 
         # 提取 intent summary
         intent_summary = ""
-        if intent:
-            intent_summary = getattr(intent, "raw_analysis", "") or ""
-            if not intent_summary and hasattr(intent, "model_dump"):
-                intent_summary = json.dumps(intent.model_dump(), ensure_ascii=False)[:200]
+        if intent_obj and hasattr(intent_obj, "raw_analysis"):
+            intent_summary = intent_obj.raw_analysis or ""
+        elif isinstance(intent_obj, str):
+            intent_summary = intent_obj
+        if not intent_summary and intent_type:
+            intent_summary = intent_type
+        if not intent_summary and hasattr(intent_obj, "model_dump"):
+            intent_summary = json.dumps(intent_obj.model_dump(), ensure_ascii=False)[:200]
 
         # 提取反思记录
         reflection_notes = ""
@@ -251,10 +275,10 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
             reflection_notes = "; ".join(notes)[:500]
 
         # 确定 datasource_id
-        selected_ds_id = None
-        if exec_result and agent.executors:
-            # 从 agent 执行器中找第一个（简化处理）
-            selected_ds_id = list(agent.executors.keys())[0]
+        selected_ds_id = result.get("datasource_id")
+        if not selected_ds_id and exec_result and dispatcher.executors:
+            # 从 dispatcher 执行器中找第一个（简化处理）
+            selected_ds_id = list(dispatcher.executors.keys())[0]
 
         # 记录生成日志
         log_generation(
@@ -335,10 +359,11 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
         )
 
 
-async def start_chat(session_id: str, user_query: str) -> str:
+async def start_chat(session_id: str, user_query: str, datasource_id: str | None = None) -> str:
     """启动一个聊天任务.
 
     - 取消之前的任务（如果有）
+    - 清空事件队列（复用同一个队列对象，避免 SSE 端引用失效）
     - 创建新的 asyncio task 在线程池中运行整个聊天流程
     - 返回 session_id
     """
@@ -347,15 +372,20 @@ async def start_chat(session_id: str, user_query: str) -> str:
     if old_task and not old_task.done():
         old_task.cancel()
 
-    # 创建新队列（清空旧事件）
-    _event_queues[session_id] = asyncio.Queue()
+    # 清空队列（复用同一个队列对象，避免 SSE 端持有的引用失效）
+    queue = _get_event_queue(session_id)
+    while not queue.empty():
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            break
 
     # 获取当前事件循环
     loop = asyncio.get_running_loop()
 
     # 创建新任务：整个聊天流程在线程池中运行
     task = asyncio.create_task(
-        asyncio.to_thread(_run_chat_sync, session_id, user_query, loop)
+        asyncio.to_thread(_run_chat_sync, session_id, user_query, loop, datasource_id)
     )
     _active_tasks[session_id] = task
 

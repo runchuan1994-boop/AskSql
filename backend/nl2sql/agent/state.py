@@ -24,8 +24,11 @@ class IntentResult(BaseModel):
     aggregation: Optional[str] = None
     dimensions: list[str] = Field(default_factory=list)
     ambiguities: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)  # 模型做出的合理默认假设
     confidence: float = 0.0
     raw_analysis: str = ""
+    action: str = "query"  # query / connect_datasource
+    datasource_info: dict = Field(default_factory=dict)  # 提取到的连接信息
 
 
 class ProbeFinding(BaseModel):
@@ -91,6 +94,11 @@ class AgentState(BaseModel):
     clarification_questions: list[str] = Field(default_factory=list)
     awaiting_clarification: bool = False
 
+    # 查询改写（合理推测，减少澄清）
+    original_query: Optional[str] = None  # 保存用户原始查询（改写前）
+    rewritten_query: Optional[str] = None
+    query_assumptions: list[str] = Field(default_factory=list)
+
     # SQL 与执行
     sql: Optional[str] = None
     execution_result: Optional[ExecutionResult] = None
@@ -102,6 +110,10 @@ class AgentState(BaseModel):
     max_iterations: int = 5
     satisfied: bool = False  # 反思是否满意
     needs_revision: bool = False  # 是否需要修正 SQL
+
+    # 数据源连接
+    datasource_id: Optional[str] = None
+    tables_imported: int = 0
 
     # 可视化
     viz_spec: Optional[dict] = None  # VizSpec dict: {charts: [...]}

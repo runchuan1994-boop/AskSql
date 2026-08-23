@@ -6,6 +6,7 @@ import type { Message } from '../../lib/types'
 import { SqlDisplay } from './SqlDisplay'
 import { ResultTable } from './ResultTable'
 import { ChartGrid } from '../chart/ChartGrid'
+import { ClarificationCard } from './ClarificationCard'
 import { clsx, formatTime } from '../../lib/utils'
 
 interface ChatMessageProps {
@@ -46,18 +47,41 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <span className="ml-2">{formatTime(message.created_at)}</span>
         </div>
 
-        <div
-          className={clsx(
-            'rounded-lg px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words',
-            isUser
-              ? 'bg-indigo-600 text-white'
-              : 'bg-white border border-gray-200 text-gray-800',
-          )}
-        >
-          {message.content || (
-            <span className="text-gray-400 italic">（无内容）</span>
-          )}
-        </div>
+        {message.content && (
+          <div
+            className={clsx(
+              'rounded-lg px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words',
+              isUser
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white border border-gray-200 text-gray-800',
+            )}
+          >
+            {message.content}
+          </div>
+        )}
+
+        {/* 澄清卡片 */}
+        {message.clarification && message.clarification.questions.length > 0 && (
+          <div className="mt-2">
+            <ClarificationCard
+              questions={message.clarification.questions}
+              resolved={message.clarification.resolved}
+            />
+          </div>
+        )}
+
+        {/* 查询假设说明 */}
+        {message.query_assumptions && message.query_assumptions.length > 0 && (
+          <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800">
+            <div className="font-medium mb-1 text-amber-700">💡 基于以下假设分析</div>
+            <ul className="list-disc list-inside space-y-0.5">
+              {message.query_assumptions.map((a, i) => (
+                <li key={i}>{a}</li>
+              ))}
+            </ul>
+            <div className="mt-1 text-amber-600">如果假设不对，可以告诉我调整。</div>
+          </div>
+        )}
 
         {/* SQL 代码块 */}
         {message.sql_text && (

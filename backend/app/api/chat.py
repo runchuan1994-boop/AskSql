@@ -15,6 +15,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    datasource_id: str | None = None
 
 
 @router.post("")
@@ -25,7 +26,7 @@ async def send_message(req: ChatRequest):
     if session is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
-    await chat_service.start_chat(req.session_id, req.message)
+    await chat_service.start_chat(req.session_id, req.message, req.datasource_id)
     return {
         "session_id": req.session_id,
         "status": "started",

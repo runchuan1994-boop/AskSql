@@ -3,29 +3,27 @@
  */
 import { useEffect, useRef } from 'react'
 import { ChatMessage } from './ChatMessage'
-import { ThinkingIndicator } from './ThinkingIndicator'
-import type { Message, ThinkingStage } from '../../lib/types'
+import { ThinkingTimeline } from './ThinkingTimeline'
+import type { Message, ThinkingStep } from '../../lib/types'
 
 interface MessageListProps {
   messages: Message[]
   isLoading: boolean
   isStreaming: boolean
-  currentStage: ThinkingStage | null
-  streamingSql: string | null
+  thinkingSteps: ThinkingStep[]
 }
 
 export function MessageList({
   messages,
   isLoading,
   isStreaming,
-  currentStage,
-  streamingSql,
+  thinkingSteps,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isStreaming, currentStage, streamingSql])
+  }, [messages, isStreaming, thinkingSteps])
 
   if (isLoading) {
     return (
@@ -51,7 +49,7 @@ export function MessageList({
         ))}
 
         {isStreaming && (
-          <ThinkingIndicator stage={currentStage} sql={streamingSql} />
+          <ThinkingTimeline steps={thinkingSteps} isStreaming={isStreaming} />
         )}
 
         <div ref={bottomRef} />

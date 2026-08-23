@@ -9,6 +9,7 @@ from nl2sql.llm import Message, MessageRole
 from nl2sql.llm.factory import create_llm_client
 
 from ..state import ReactThought
+from ._step_utils import step_start, step_complete, step_error
 
 if TYPE_CHECKING:
     from ..state import AgentState
@@ -98,91 +99,120 @@ def reflect_node(state: dict) -> dict:
     Returns:
         dict with react_thoughts, iteration, _satisfied, _needs_revision
     """
-    exec_result = state.get("execution_result")
+    iteration = state.get("iteration", 0) + 1
+    step_label = f"反思优化（第 {iteration} 轮）" if iteration > 1 else "反思优化"
+    t0 = step_start(state, "reflection", step_label)
 
-    # No execution result: skip reflection
-    if exec_result is None:
-        return {
-            "react_thoughts": [],
-            "iteration": state.get("iteration", 0) + 1,
-            "satisfied": True,
-            "needs_revision": False,
-        }
+    try:
+        exec_result = state.get("execution_result")
 
-    result_summary = _build_result_summary(exec_result)
+        # No execution result: skip reflection
+        if exec_result is None:
+            step_complete(state, "reflection", step_label, {
+                "satisfied": True,
+                "needs_revision": False,
+                "thought": "无执行结果，跳过反思",
+                "iteration": iteration,
+            }, t0)
+            return {
+                "react_thoughts": [],
+                "iteration": iteration,
+                "satisfied": True,
+                "needs_revision": False,
+            }
 
-    # Include previous react thoughts for context
-    thoughts_context = ""
-    if state.get("react_thoughts", []):
-        lines = ["之前的反思："]
-        for i, t in enumerate(state.get("react_thoughts", [])[-3:], 1):
-            lines.append(f"  {i}. thought: {t.thought}")
-            if t.action:
-                lines.append(f"     action: {t.action}")
-            if t.observation:
-                lines.append(f"     observation: {t.observation[:200]}")
-        thoughts_context = "\n".join(lines) + "\n\n"
+        result_summary = _build_result_summary(exec_result)
 
-    user_msg = f"""{thoughts_context}用户查询：{state["user_query"]}
+        # Include previous react thoughts for context
+        thoughts_context = ""
+        if state.get("react_thoughts", []):
+            lines = ["之前的反思："]
+            for i, t in enumerate(state.get("react_thoughts", [])[-3:], 1):
+                lines.append(f"  {i}. thought: {t.thought}")
+                if t.action:
+                    lines.append(f"     action: {t.action}")
+                if t.observation:
+                    lines.append(f"     observation: {t.observation[:200]}")
+            thoughts_context = "\n".join(lines) + "\n\n"
+
+        user_query = state["user_query"]
+        user_msg = f"""{thoughts_context}用户查询：{user_query}
 
 {result_summary}
 
 请审查上述 SQL 执行结果，判断是否满足用户查询需求。
 严格按照 JSON 格式输出。"""
 
-    messages = [
-        Message(role=MessageRole.SYSTEM, content=REFLECT_SYSTEM_PROMPT),
-        Message(role=MessageRole.USER, content=user_msg),
-    ]
+        messages = [
+            Message(role=MessageRole.SYSTEM, content=REFLECT_SYSTEM_PROMPT),
+            Message(role=MessageRole.USER, content=user_msg),
+        ]
 
-    llm = create_llm_client()
-    response = llm.chat(messages, temperature=0.0)
+        llm = create_llm_client()
+        response = llm.chat(messages, temperature=0.0)
 
-    parsed = _parse_json_response(response.content)
+        parsed = _parse_json_response(response.content)
 
-    if parsed is None:
-        # Can't parse, assume not satisfied and continue
+        if parsed is None:
+            # Can't parse, assume not satisfied and continue
+            thought = ReactThought(
+                thought="无法解析反思结果，继续尝试。",
+                action="reflect",
+                observation=response.content[:200],
+            )
+            _send_event(state, "reflection", {
+                "satisfied": False,
+                "needs_revision": True,
+                "thought": "解析失败",
+            })
+            step_complete(state, "reflection", step_label, {
+                "satisfied": False,
+                "needs_revision": True,
+                "thought": "无法解析反思结果",
+                "iteration": iteration,
+            }, t0)
+            return {
+                "react_thoughts": state.get("react_thoughts", []) + [thought],
+                "iteration": iteration,
+                "satisfied": False,
+                "needs_revision": True,
+            }
+
+        satisfied = bool(parsed.get("satisfied", False))
+        needs_revision = bool(parsed.get("needs_revision", False))
+        thought_text = str(parsed.get("thought", ""))
+        suggested_fix = str(parsed.get("suggested_fix", ""))
+
         thought = ReactThought(
-            thought="无法解析反思结果，继续尝试。",
+            thought=thought_text,
             action="reflect",
-            observation=response.content[:200],
+            observation=f"satisfied={satisfied}, needs_revision={needs_revision}, fix={suggested_fix}",
         )
+
         _send_event(state, "reflection", {
-            "satisfied": False,
-            "needs_revision": True,
-            "thought": "解析失败",
+            "satisfied": satisfied,
+            "needs_revision": needs_revision,
+            "thought": thought_text,
+            "suggested_fix": suggested_fix,
         })
+
+        step_complete(state, "reflection", step_label, {
+            "satisfied": satisfied,
+            "needs_revision": needs_revision,
+            "thought": thought_text,
+            "suggested_fix": suggested_fix,
+            "iteration": iteration,
+        }, t0)
+
         return {
             "react_thoughts": state.get("react_thoughts", []) + [thought],
-            "iteration": state.get("iteration", 0) + 1,
-            "satisfied": False,
-            "needs_revision": True,
+            "iteration": iteration,
+            "satisfied": satisfied,
+            "needs_revision": needs_revision,
         }
-
-    satisfied = bool(parsed.get("satisfied", False))
-    needs_revision = bool(parsed.get("needs_revision", False))
-    thought_text = str(parsed.get("thought", ""))
-    suggested_fix = str(parsed.get("suggested_fix", ""))
-
-    thought = ReactThought(
-        thought=thought_text,
-        action="reflect",
-        observation=f"satisfied={satisfied}, needs_revision={needs_revision}, fix={suggested_fix}",
-    )
-
-    _send_event(state, "reflection", {
-        "satisfied": satisfied,
-        "needs_revision": needs_revision,
-        "thought": thought_text,
-        "suggested_fix": suggested_fix,
-    })
-
-    return {
-        "react_thoughts": state.get("react_thoughts", []) + [thought],
-        "iteration": state.get("iteration", 0) + 1,
-        "satisfied": satisfied,
-        "needs_revision": needs_revision,
-    }
+    except Exception as e:
+        step_error(state, "reflection", step_label, str(e), t0)
+        raise
 
 
 def need_retry_conditional(state: dict) -> str:

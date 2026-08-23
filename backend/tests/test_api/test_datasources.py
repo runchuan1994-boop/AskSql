@@ -86,7 +86,7 @@ def test_list_datasources():
                 "project_id": project_id,
                 "name": "DS1",
                 "type": "sqlite",
-                "database": ":memory:",
+                "database": "/tmp/db1.sqlite",
             },
         )
         client.post(
@@ -95,7 +95,7 @@ def test_list_datasources():
                 "project_id": project_id,
                 "name": "DS2",
                 "type": "sqlite",
-                "database": ":memory:",
+                "database": "/tmp/db2.sqlite",
             },
         )
 
@@ -356,3 +356,141 @@ def test_password_is_encrypted_in_db():
             assert "secret123" not in encrypted
         finally:
             conn.close()
+
+
+def test_create_duplicate_datasource_returns_existing():
+    """相同连接信息的数据源不重复创建，返回已有数据源。"""
+    from fastapi.testclient import TestClient
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        main_mod = _reload_app_modules(tmpdir)
+        client = TestClient(main_mod.app)
+        project_id = _create_project(client)
+
+        # 创建第一个数据源
+        resp1 = client.post(
+            "/api/datasources",
+            json={
+                "project_id": project_id,
+                "name": "First DS",
+                "type": "mysql",
+                "host": "localhost",
+                "port": 3306,
+                "database": "mydb",
+                "username": "root",
+                "password": "pass123",
+            },
+        )
+        assert resp1.status_code == 200
+        ds1 = resp1.json()
+        ds1_id = ds1["id"]
+
+        # 创建第二个完全相同的数据源（只是名字不同）
+        resp2 = client.post(
+            "/api/datasources",
+            json={
+                "project_id": project_id,
+                "name": "Second DS",
+                "type": "mysql",
+                "host": "localhost",
+                "port": 3306,
+                "database": "mydb",
+                "username": "root",
+                "password": "pass123",
+            },
+        )
+        assert resp2.status_code == 200
+        ds2 = resp2.json()
+
+        # 应该返回已有数据源（ID 相同），不创建新的
+        assert ds2["id"] == ds1_id
+
+        # 列表中应该只有 1 个
+        list_resp = client.get(f"/api/datasources?project_id={project_id}")
+        assert list_resp.status_code == 200
+        assert len(list_resp.json()) == 1
+
+
+def test_create_datasource_with_different_password_creates_new():
+    """密码不同时视为不同数据源，会创建新的。"""
+    from fastapi.testclient import TestClient
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        main_mod = _reload_app_modules(tmpdir)
+        client = TestClient(main_mod.app)
+        project_id = _create_project(client)
+
+        client.post(
+            "/api/datasources",
+            json={
+                "project_id": project_id,
+                "name": "DS A",
+                "type": "mysql",
+                "host": "localhost",
+                "port": 3306,
+                "database": "mydb",
+                "username": "root",
+                "password": "pass1",
+            },
+        )
+
+        resp2 = client.post(
+            "/api/datasources",
+            json={
+                "project_id": project_id,
+                "name": "DS B",
+                "type": "mysql",
+                "host": "localhost",
+                "port": 3306,
+                "database": "mydb",
+                "username": "root",
+                "password": "pass2",
+            },
+        )
+        ds2 = resp2.json()
+
+        # 应该是个新数据源
+        list_resp = client.get(f"/api/datasources?project_id={project_id}")
+        assert len(list_resp.json()) == 2
+        assert ds2["name"] == "DS B"
+
+
+def test_create_datasource_different_host_creates_new():
+    """host 不同时视为不同数据源。"""
+    from fastapi.testclient import TestClient
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        main_mod = _reload_app_modules(tmpdir)
+        client = TestClient(main_mod.app)
+        project_id = _create_project(client)
+
+        client.post(
+            "/api/datasources",
+            json={
+                "project_id": project_id,
+                "name": "Local",
+                "type": "mysql",
+                "host": "localhost",
+                "port": 3306,
+                "database": "mydb",
+                "username": "root",
+                "password": "pass",
+            },
+        )
+
+        client.post(
+            "/api/datasources",
+            json={
+                "project_id": project_id,
+                "name": "Remote",
+                "type": "mysql",
+                "host": "192.168.1.100",
+                "port": 3306,
+                "database": "mydb",
+                "username": "root",
+                "password": "pass",
+            },
+        )
+
+        list_resp = client.get(f"/api/datasources?project_id={project_id}")
+        assert len(list_resp.json()) == 2

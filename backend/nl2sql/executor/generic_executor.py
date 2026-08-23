@@ -1,15 +1,42 @@
 """Generic SQL executor based on SQLAlchemy."""
 from __future__ import annotations
 
+import datetime
+import decimal
 import re
 import time
 from typing import Optional
+from uuid import UUID
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from .base import SQLExecutor
 from .models import ExecutionResult
+
+
+def _jsonify_value(val):
+    """将单个值转换为 JSON 可序列化的基本类型."""
+    if val is None or isinstance(val, (bool, int, float, str)):
+        return val
+    if isinstance(val, (datetime.datetime, datetime.date, datetime.time)):
+        return val.isoformat()
+    if isinstance(val, decimal.Decimal):
+        return float(val)
+    if isinstance(val, UUID):
+        return str(val)
+    if isinstance(val, bytes):
+        return val.hex()
+    return str(val)
+
+
+def _jsonify_rows(rows):
+    """将行数据中的非 JSON 类型转换为可序列化类型."""
+    result = []
+    for row in rows:
+        new_row = tuple(_jsonify_value(v) for v in row)
+        result.append(new_row)
+    return result
 
 # Allowed statement types (read-only)
 _ALLOWED_STATEMENT_PREFIXES = (
@@ -111,7 +138,8 @@ class GenericSQLExecutor(SQLExecutor):
                     fetched = fetched[: self._max_rows]
 
                 columns = list(result.keys()) if result.returns_rows else []
-                rows = [tuple(row) for row in fetched]
+                # 将非 JSON 原生类型（datetime, Decimal 等）转换为基本类型
+                rows = _jsonify_rows([tuple(row) for row in fetched])
 
                 duration = (time.perf_counter() - start_time) * 1000
                 return ExecutionResult(

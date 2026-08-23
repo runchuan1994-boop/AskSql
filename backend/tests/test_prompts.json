@@ -1,0 +1,205 @@
+{
+  "description": "NL2SQL 系统测试集 - 银行金融数据库场景",
+  "datasource": "finance_db",
+  "datasource_type": "postgresql",
+  "version": "1.0.0",
+  "created_at": "2026-08-22",
+  "total": 20,
+  "categories": {
+    "simple_count": "简单计数统计",
+    "aggregation": "聚合计算",
+    "filter": "条件过滤查询",
+    "join": "多表关联查询",
+    "group_by": "分组聚合",
+    "sorting": "排序与TopN",
+    "time_range": "时间范围查询",
+    "subquery": "子查询/嵌套查询",
+    "comparison": "比较与排名",
+    "multi_condition": "多条件组合",
+    "ambiguous": "需要澄清的模糊查询",
+    "business_analysis": "业务分析类查询"
+  },
+  "test_cases": [
+    {
+      "id": "TC001",
+      "category": "simple_count",
+      "difficulty": "easy",
+      "prompt": "总共有多少个客户？",
+      "expected_tables": ["customers"],
+      "expected_sql_pattern": "SELECT COUNT.*FROM customers",
+      "description": "最基础的单表计数查询"
+    },
+    {
+      "id": "TC002",
+      "category": "simple_count",
+      "difficulty": "easy",
+      "prompt": "银行有多少家分支机构？",
+      "expected_tables": ["branches"],
+      "expected_sql_pattern": "SELECT COUNT.*FROM branches",
+      "description": "简单计数 - 分支机构数量"
+    },
+    {
+      "id": "TC003",
+      "category": "filter",
+      "difficulty": "easy",
+      "prompt": "查询所有活跃状态的账户数量",
+      "expected_tables": ["accounts"],
+      "expected_sql_pattern": "SELECT COUNT.*FROM accounts.*status.*active",
+      "description": "带状态过滤的计数查询"
+    },
+    {
+      "id": "TC004",
+      "category": "aggregation",
+      "difficulty": "easy",
+      "prompt": "所有贷款的总金额是多少？",
+      "expected_tables": ["loans"],
+      "expected_sql_pattern": "SELECT SUM.*amount.*FROM loans",
+      "description": "简单聚合 - 求和"
+    },
+    {
+      "id": "TC005",
+      "category": "aggregation",
+      "difficulty": "easy",
+      "prompt": "员工的平均工资是多少？",
+      "expected_tables": ["employees"],
+      "expected_sql_pattern": "SELECT AVG.*salary.*FROM employees",
+      "description": "简单聚合 - 平均值"
+    },
+    {
+      "id": "TC006",
+      "category": "group_by",
+      "difficulty": "medium",
+      "prompt": "按账户类型统计各类型的账户数量",
+      "expected_tables": ["accounts"],
+      "expected_sql_pattern": "SELECT account_type.*COUNT.*FROM accounts.*GROUP BY account_type",
+      "description": "单表分组统计"
+    },
+    {
+      "id": "TC007",
+      "category": "group_by",
+      "difficulty": "medium",
+      "prompt": "每种贷款类型的平均贷款金额是多少？",
+      "expected_tables": ["loans"],
+      "expected_sql_pattern": "SELECT loan_type.*AVG.*amount.*FROM loans.*GROUP BY loan_type",
+      "description": "分组聚合 - 按贷款类型"
+    },
+    {
+      "id": "TC008",
+      "category": "sorting",
+      "difficulty": "medium",
+      "prompt": "找出余额最高的前10个账户",
+      "expected_tables": ["accounts"],
+      "expected_sql_pattern": "SELECT.*FROM accounts.*ORDER BY balance.*DESC.*LIMIT.*10",
+      "description": "排序与TopN查询"
+    },
+    {
+      "id": "TC009",
+      "category": "time_range",
+      "difficulty": "medium",
+      "prompt": "今年新开的账户有多少个？",
+      "expected_tables": ["accounts"],
+      "expected_sql_pattern": "SELECT COUNT.*FROM accounts.*open_date.*2026",
+      "description": "时间范围过滤 - 年度范围"
+    },
+    {
+      "id": "TC010",
+      "category": "join",
+      "difficulty": "medium",
+      "prompt": "查询每个客户的姓名及其账户余额",
+      "expected_tables": ["customers", "accounts"],
+      "expected_sql_pattern": "SELECT.*customers.*accounts.*JOIN.*customer_id",
+      "description": "两表关联查询 - 客户与账户"
+    },
+    {
+      "id": "TC011",
+      "category": "join",
+      "difficulty": "medium",
+      "prompt": "每个分支机构有多少名员工？",
+      "expected_tables": ["branches", "employees"],
+      "expected_sql_pattern": "SELECT.*branches.*employees.*JOIN.*branch_id.*GROUP BY",
+      "description": "两表关联 + 分组统计"
+    },
+    {
+      "id": "TC012",
+      "category": "join",
+      "difficulty": "hard",
+      "prompt": "查询有贷款的客户姓名、贷款金额和贷款类型",
+      "expected_tables": ["customers", "loans", "accounts"],
+      "expected_sql_pattern": "SELECT.*customers.*loans.*JOIN",
+      "description": "三表关联查询"
+    },
+    {
+      "id": "TC013",
+      "category": "multi_condition",
+      "difficulty": "medium",
+      "prompt": "查询信用评分高于700且年收入超过10万的客户",
+      "expected_tables": ["customers"],
+      "expected_sql_pattern": "SELECT.*FROM customers.*risk_score.*700.*annual_income.*100000",
+      "description": "多条件过滤查询"
+    },
+    {
+      "id": "TC014",
+      "category": "comparison",
+      "difficulty": "hard",
+      "prompt": "哪些客户的存款总额超过了贷款总额？",
+      "expected_tables": ["accounts", "loans", "customers"],
+      "expected_sql_pattern": ".*accounts.*loans.*balance.*amount.*HAVING|WHERE",
+      "description": "比较型查询 - 需要聚合后比较"
+    },
+    {
+      "id": "TC015",
+      "category": "subquery",
+      "difficulty": "hard",
+      "prompt": "找出贷款金额高于平均贷款额的客户信息",
+      "expected_tables": ["loans", "customers"],
+      "expected_sql_pattern": ".*amount.*>.*SELECT AVG.*loans",
+      "description": "子查询 - 高于平均值"
+    },
+    {
+      "id": "TC016",
+      "category": "time_range",
+      "difficulty": "hard",
+      "prompt": "过去30天内交易量最大的账户是哪个？交易总额是多少？",
+      "expected_tables": ["transactions", "accounts"],
+      "expected_sql_pattern": "SELECT.*account_id.*SUM.*amount.*transactions.*txn_time.*GROUP BY.*ORDER BY.*DESC.*LIMIT",
+      "description": "时间范围 + 多表 + 聚合 + 排序"
+    },
+    {
+      "id": "TC017",
+      "category": "business_analysis",
+      "difficulty": "hard",
+      "prompt": "按城市统计各城市分支机构的平均账户余额",
+      "expected_tables": ["branches", "accounts"],
+      "expected_sql_pattern": "SELECT.*city.*AVG.*balance.*branches.*accounts.*JOIN.*branch_id.*GROUP BY.*city",
+      "description": "业务分析 - 跨城市账户余额分析"
+    },
+    {
+      "id": "TC018",
+      "category": "business_analysis",
+      "difficulty": "hard",
+      "prompt": "各职位员工的平均工资是多少？按平均工资从高到低排序",
+      "expected_tables": ["employees"],
+      "expected_sql_pattern": "SELECT position.*AVG.*salary.*FROM employees.*GROUP BY position.*ORDER BY.*DESC",
+      "description": "业务分析 - 薪资结构分析"
+    },
+    {
+      "id": "TC019",
+      "category": "ambiguous",
+      "difficulty": "hard",
+      "prompt": "最近的交易情况怎么样？",
+      "expected_tables": ["transactions"],
+      "expected_sql_pattern": "",
+      "expected_need_clarification": true,
+      "description": "模糊查询 - 需要澄清时间范围、统计维度等"
+    },
+    {
+      "id": "TC020",
+      "category": "business_analysis",
+      "difficulty": "xhard",
+      "prompt": "分析各风险等级投资组合的客户中，有多少人同时持有抵押贷款？请按风险等级分组展示。",
+      "expected_tables": ["investment_portfolios", "loans", "customers"],
+      "expected_sql_pattern": ".*investment_portfolios.*loans.*mortgage.*risk_level.*GROUP BY",
+      "description": "综合分析 - 多表关联 + 多条件 + 分组"
+    }
+  ]
+}

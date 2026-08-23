@@ -7,9 +7,10 @@ import { copyToClipboard } from '../../lib/utils'
 
 interface SqlDisplayProps {
   sql: string
+  compact?: boolean
 }
 
-export function SqlDisplay({ sql }: SqlDisplayProps) {
+export function SqlDisplay({ sql, compact = false }: SqlDisplayProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -22,7 +23,7 @@ export function SqlDisplay({ sql }: SqlDisplayProps) {
 
   return (
     <div className="rounded-lg overflow-hidden border border-gray-200 bg-gray-900">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800">
+      <div className={`flex items-center justify-between bg-gray-800 ${compact ? 'px-2 py-1' : 'px-3 py-1.5'}`}>
         <span className="text-xs text-gray-400 font-medium">SQL</span>
         <button
           onClick={handleCopy}
@@ -32,17 +33,17 @@ export function SqlDisplay({ sql }: SqlDisplayProps) {
           {copied ? (
             <>
               <Check size={12} />
-              已复制
+              {!compact && '已复制'}
             </>
           ) : (
             <>
               <Copy size={12} />
-              复制
+              {!compact && '复制'}
             </>
           )}
         </button>
       </div>
-      <pre className="p-3 text-sm text-gray-100 overflow-x-auto font-mono leading-relaxed">
+      <pre className={`${compact ? 'p-2 text-xs' : 'p-3 text-sm'} text-gray-100 overflow-x-auto font-mono leading-relaxed max-h-40`}>
         <code>{sql}</code>
       </pre>
     </div>

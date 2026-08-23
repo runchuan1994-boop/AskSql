@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from nl2sql.llm import Message, MessageRole
 from nl2sql.llm.factory import create_llm_client
 from nl2sql.schema import SchemaMatcher
+from ._step_utils import step_start, step_complete, step_error
 
 if TYPE_CHECKING:
     from ..state import AgentState
@@ -159,59 +160,73 @@ def generate_sql_node(state: dict) -> dict:
     Returns:
         dict with "sql" and "status"
     """
-    schema_context, db_type = _build_detailed_schema_context(state)
-    probe_text = _build_probe_findings_text(state)
+    iteration = state.get("iteration", 0) + 1
+    step_label = f"生成 SQL（第 {iteration} 轮）" if iteration > 1 else "生成 SQL"
+    t0 = step_start(state, "sql_generated", step_label)
 
-    # Build error context from last execution failure
-    error_context = ""
-    if state.get("execution_result") and not state.get("execution_result").success:
-        error_context = (
-            f"上次执行的 SQL 出错了，请修正：\n"
-            f"  原 SQL: {state.get("sql")}\n"
-            f"  错误信息: {state.get("execution_result").error}\n"
-        )
+    try:
+        schema_context, db_type = _build_detailed_schema_context(state)
+        probe_text = _build_probe_findings_text(state)
 
-    # Build conversation history (for multi-turn)
-    history_text = ""
-    if state.get("conversation_history", []):
-        history_lines = []
-        for msg in state.get("conversation_history", [])[-6:]:  # last 6 messages
-            if msg.role == MessageRole.USER:
-                history_lines.append(f"用户: {msg.content}")
-            elif msg.role == MessageRole.ASSISTANT:
-                history_lines.append(f"助手: {msg.content}")
-        if history_lines:
-            history_text = "对话历史：\n" + "\n".join(history_lines) + "\n"
+        # Build error context from last execution failure
+        error_context = ""
+        if state.get("execution_result") and not state.get("execution_result").success:
+            error_context = (
+                f"上次执行的 SQL 出错了，请修正：\n"
+                f"  原 SQL: {state.get("sql")}\n"
+                f"  错误信息: {state.get("execution_result").error}\n"
+            )
 
-    user_msg_parts = []
-    if history_text:
-        user_msg_parts.append(history_text)
-    user_msg_parts.extend([
-        f"用户查询：{state["user_query"]}",
-        "",
-        f"数据库表结构：\n{schema_context}",
-    ])
-    if probe_text:
-        user_msg_parts.extend(["", probe_text])
-    if error_context:
-        user_msg_parts.extend(["", error_context])
-    user_msg_parts.extend([
-        "",
-        "请生成正确的 SQL 查询，用 ```sql ... ``` 包裹输出。",
-    ])
-    user_msg = "\n".join(user_msg_parts)
+        # Build conversation history (for multi-turn)
+        history_text = ""
+        if state.get("conversation_history", []):
+            history_lines = []
+            for msg in state.get("conversation_history", [])[-6:]:  # last 6 messages
+                if msg.role == MessageRole.USER:
+                    history_lines.append(f"用户: {msg.content}")
+                elif msg.role == MessageRole.ASSISTANT:
+                    history_lines.append(f"助手: {msg.content}")
+            if history_lines:
+                history_text = "对话历史：\n" + "\n".join(history_lines) + "\n"
 
-    system_prompt = GENERATE_SYSTEM_PROMPT.format(db_type=db_type)
-    messages = [
-        Message(role=MessageRole.SYSTEM, content=system_prompt),
-        Message(role=MessageRole.USER, content=user_msg),
-    ]
+        user_msg_parts = []
+        if history_text:
+            user_msg_parts.append(history_text)
+        user_query = state["user_query"]
+        user_msg_parts.extend([
+            f"用户查询：{user_query}",
+            "",
+            f"数据库表结构：\n{schema_context}",
+        ])
+        if probe_text:
+            user_msg_parts.extend(["", probe_text])
+        if error_context:
+            user_msg_parts.extend(["", error_context])
+        user_msg_parts.extend([
+            "",
+            "请生成正确的 SQL 查询，用 ```sql ... ``` 包裹输出。",
+        ])
+        user_msg = "\n".join(user_msg_parts)
 
-    llm = create_llm_client()
-    response = llm.chat(messages, temperature=0.0)
+        system_prompt = GENERATE_SYSTEM_PROMPT.format(db_type=db_type)
+        messages = [
+            Message(role=MessageRole.SYSTEM, content=system_prompt),
+            Message(role=MessageRole.USER, content=user_msg),
+        ]
 
-    sql = extract_sql_from_text(response.content)
+        llm = create_llm_client()
+        response = llm.chat(messages, temperature=0.0)
 
-    _send_event(state, "sql_generated", {"sql": sql})
+        sql = extract_sql_from_text(response.content)
 
-    return {"sql": sql, "status": "thinking"}
+        _send_event(state, "sql_generated", {"sql": sql})
+
+        step_complete(state, "sql_generated", step_label, {
+            "sql": sql,
+            "iteration": iteration,
+        }, t0)
+
+        return {"sql": sql, "status": "thinking"}
+    except Exception as e:
+        step_error(state, "sql_generated", step_label, str(e), t0)
+        raise

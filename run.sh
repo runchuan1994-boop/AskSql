@@ -47,19 +47,42 @@ ok "已清理旧容器"
 # 4. 确保数据目录存在
 mkdir -p backend/data backend/config/schemas backend/config/projects
 
-# 5. 构建镜像
+# 5. 读取 .env 获取沙盒配置（用于判断是否需要构建沙盒镜像）
+if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+fi
+
+# 6. 构建主服务镜像
 echo ""
 info "构建 Docker 镜像..."
 docker compose build
-ok "镜像构建完成"
+ok "主服务镜像构建完成"
 
-# 6. 启动服务
+# 7. 构建沙盒镜像（如果启用了沙盒，或者镜像不存在）
+SANDBOX_IMAGE="${SANDBOX_IMAGE:-nl2sql-sandbox:latest}"
+if [ "${SANDBOX_ENABLED:-false}" = "true" ] || ! docker image inspect "$SANDBOX_IMAGE" &> /dev/null; then
+    echo ""
+    info "构建沙盒执行器镜像 ($SANDBOX_IMAGE)..."
+    if [ -d backend/sandbox-image ]; then
+        docker build -t "$SANDBOX_IMAGE" backend/sandbox-image/
+        ok "沙盒镜像构建完成"
+    else
+        warn "未找到 backend/sandbox-image 目录，跳过沙盒镜像构建"
+    fi
+else
+    info "沙盒镜像已存在且未启用沙盒，跳过构建"
+fi
+
+# 8. 启动服务
 echo ""
 info "启动服务..."
 docker compose up -d
 ok "容器已启动"
 
-# 7. 等待后端就绪
+# 9. 等待后端就绪
 echo ""
 info "等待后端服务就绪..."
 max_wait=60
@@ -79,7 +102,18 @@ if [ $waited -ge $max_wait ]; then
     warn "后端启动超时，请检查日志: docker compose logs backend"
 fi
 
-# 8. 完成
+# 10. 沙盒运行时提示
+if [ "${SANDBOX_ENABLED:-false}" = "true" ]; then
+    echo ""
+    info "沙盒已启用，运行时: ${SANDBOX_RUNTIME:-runc}"
+    if [ "${SANDBOX_RUNTIME:-runc}" = "runsc" ]; then
+        ok "gVisor (runsc) 运行时：内核级隔离"
+    else
+        warn "runc 运行时：普通容器隔离（生产环境建议使用 gVisor）"
+    fi
+fi
+
+# 11. 完成
 echo ""
 echo -e "${BOLD}${GREEN}  NL2SQL Agent 部署成功！${NC}"
 echo ""

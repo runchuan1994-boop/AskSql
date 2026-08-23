@@ -5,6 +5,7 @@ import type {
   Project,
   Session,
   Message,
+  Datasource,
   DatasourceSchemaOverview,
   TableDetail,
   PaginatedResult,
@@ -65,11 +66,21 @@ export function getMessages(sessionId: string): Promise<Message[]> {
 export async function sendChatMessage(
   sessionId: string,
   message: string,
+  datasourceId?: string,
 ): Promise<{ session_id: string; status: string }> {
+  const body: Record<string, unknown> = { session_id: sessionId, message }
+  if (datasourceId) {
+    body.datasource_id = datasourceId
+  }
   return request<{ session_id: string; status: string }>('/chat', {
     method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, message }),
+    body: JSON.stringify(body),
   })
+}
+
+// ---------- 数据源 ----------
+export function listDatasources(projectId: string): Promise<Datasource[]> {
+  return request<Datasource[]>(`/datasources?project_id=${encodeURIComponent(projectId)}`)
 }
 
 // ---------- 分页结果 ----------
