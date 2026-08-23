@@ -53,20 +53,44 @@ This isn't one of those "generate SQL and pray" tools. It actually **thinks thin
 
 ## 🚀 Quick Start
 
-### Docker (recommended — one command)
+Three steps, that's it.
+
+### 1. Copy the env file
 
 ```bash
-# 1. Copy env file
 cp backend/.env.example .env
+```
 
-# 2. Edit .env and add your API key
-vim .env
+### 2. Pick an LLM and add your API key
 
-# 3. Launch
+Open `.env` and set **just two things** — provider + key. Everything else has sensible defaults.
+
+**Using Claude (recommended):**
+```dotenv
+LLM_PROVIDER=claude
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxx
+```
+
+**Using OpenAI:**
+```dotenv
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-xxxxxxxxx
+```
+
+**Using a local model (Ollama / vLLM / etc.):**
+```dotenv
+LLM_PROVIDER=local_openai_compatible
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_MODEL=qwen2.5:7b
+```
+
+### 3. Launch
+
+```bash
 docker compose up -d
 ```
 
-Open http://localhost:5173 and start chatting.
+Open http://localhost:5173 and start chatting with your data.
 
 ### Development Mode
 
@@ -135,24 +159,39 @@ Generate SQL  Reflect: does the result make sense?
 
 In short: **think first → execute → verify → deliver.** Exactly how a good data analyst works.
 
-## 🔧 Configuration
+## ⚙️ Advanced Configuration
 
-### LLM Providers
+All config lives in `.env` — that's the only file you need. The defaults work for most people, but here's what you can tweak:
 
-| Provider | Notes | Env vars |
-|----------|-------|----------|
-| `claude` | Anthropic Claude (recommended — great reasoning) | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` |
-| `openai` | Official OpenAI | `OPENAI_API_KEY`, `OPENAI_MODEL` |
-| `local_openai_compatible` | Local models (Ollama / vLLM / LM Studio, etc.) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` |
+### LLM options
+
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `LLM_PROVIDER` | `claude` | `claude`, `openai`, or `local_openai_compatible` |
+| `ANTHROPIC_API_KEY` | — | Your Claude API key |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Which Claude model to use |
+| `OPENAI_API_KEY` | — | Your OpenAI (or compatible) API key |
+| `OPENAI_MODEL` | `gpt-4o` | Which OpenAI-compatible model to use |
+| `OPENAI_BASE_URL` | — | Base URL for local / compatible providers |
+
+### Agent behavior
+
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `MAX_ITERATIONS` | `5` | Max retry loops before giving up |
+| `SQL_TIMEOUT_SECONDS` | `30` | SQL query timeout |
+| `SQL_MAX_ROWS` | `1000` | Max rows returned (safety limit) |
 
 ### Sandbox
 
-SQL runs inside sandboxed containers with:
-- Read-only mode for data safety
-- Timeout, memory, and CPU limits
-- Optional network access (for installing database drivers on the fly)
+SQL runs inside isolated containers with read-only mode, timeouts, and resource limits. Toggle it on if you want to let the agent install database drivers on the fly:
 
-See `.env.example` for details.
+```dotenv
+SANDBOX_ENABLED=true
+SANDBOX_NETWORK=true
+```
+
+See `.env.example` for the full list of sandbox options.
 
 ## 🧪 Running Tests
 

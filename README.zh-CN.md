@@ -53,20 +53,44 @@ SQL 本身不难，难的是**来回沟通的成本**和**重复劳动的时间*
 
 ## 🚀 快速开始
 
-### Docker 一键启动（推荐）
+三步搞定，就这么简单。
+
+### 1. 复制配置文件
 
 ```bash
-# 1. 复制环境变量
 cp backend/.env.example .env
+```
 
-# 2. 编辑 .env，填入你的 API Key
-vim .env
+### 2. 选个模型，填个 Key
 
-# 3. 启动
+打开 `.env`，**只需要填 2 项** —— 选 provider + 填 API Key。其他的默认值都帮你调好了。
+
+**用 Claude（推荐，思考能力最强）：**
+```dotenv
+LLM_PROVIDER=claude
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxx
+```
+
+**用 OpenAI：**
+```dotenv
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-xxxxxxxxx
+```
+
+**用本地模型（Ollama / vLLM / 等等）：**
+```dotenv
+LLM_PROVIDER=local_openai_compatible
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_MODEL=qwen2.5:7b
+```
+
+### 3. 启动
+
+```bash
 docker compose up -d
 ```
 
-打开 http://localhost:5173 开聊。
+打开 http://localhost:5173，开始跟你的数据库聊天。
 
 ### 开发模式
 
@@ -135,24 +159,39 @@ AskSql/
 
 简单说就是：**先想清楚 → 再动手 → 做完检查 → 给你结果**。跟一个靠谱的数据分析师干活儿一个路子。
 
-## 🔧 配置
+## ⚙️ 高级配置
 
-### LLM 提供商
+所有配置都在 `.env` 里 —— 就这一个文件。默认值已经够用了，想折腾的看下面。
 
-| Provider | 说明 | 环境变量 |
-|----------|------|----------|
-| `claude` | Anthropic Claude（推荐，思考能力强） | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` |
-| `openai` | OpenAI 官方 | `OPENAI_API_KEY`, `OPENAI_MODEL` |
-| `local_openai_compatible` | 本地兼容模型（Ollama / vLLM / LM Studio 等） | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` |
+### LLM 相关
 
-### 沙盒配置
+| 变量 | 默认值 | 干啥的 |
+|------|--------|--------|
+| `LLM_PROVIDER` | `claude` | 模型提供商：`claude` / `openai` / `local_openai_compatible` |
+| `ANTHROPIC_API_KEY` | — | Claude 的 API Key |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | 用哪个 Claude 模型 |
+| `OPENAI_API_KEY` | — | OpenAI（或兼容）的 API Key |
+| `OPENAI_MODEL` | `gpt-4o` | 用哪个模型 |
+| `OPENAI_BASE_URL` | — | 本地模型的接口地址 |
 
-Agent 执行 SQL 在沙盒容器中，支持：
-- 只读模式保护数据安全
-- 超时 + 内存 + CPU 限制
-- 可选网络访问（用于动态安装数据库驱动）
+### Agent 行为
 
-详见 `.env.example`。
+| 变量 | 默认值 | 干啥的 |
+|------|--------|--------|
+| `MAX_ITERATIONS` | `5` | 最多重试几次 |
+| `SQL_TIMEOUT_SECONDS` | `30` | SQL 查询超时时间 |
+| `SQL_MAX_ROWS` | `1000` | 最多返回多少行（安全限制） |
+
+### 沙盒
+
+SQL 在隔离容器里执行，只读 + 超时 + 资源限制。想让 Agent 自动安装数据库驱动的话可以打开：
+
+```dotenv
+SANDBOX_ENABLED=true
+SANDBOX_NETWORK=true
+```
+
+更多沙盒选项见 `.env.example`。
 
 ## 🧪 运行测试
 
