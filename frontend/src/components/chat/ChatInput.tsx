@@ -1,9 +1,11 @@
 /**
  * 聊天输入框
+ * 玻璃质感风格
  */
 import { useState, KeyboardEvent } from 'react'
 import { Send } from 'lucide-react'
 import { clsx } from '../../lib/utils'
+import { useTranslation } from '../../i18n'
 
 interface ChatInputProps {
   onSend: (content: string) => void | Promise<void>
@@ -14,8 +16,9 @@ interface ChatInputProps {
 export function ChatInput({
   onSend,
   disabled = false,
-  placeholder = '输入你的问题，按 Enter 发送...',
+  placeholder,
 }: ChatInputProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState('')
   const [sending, setSending] = useState(false)
 
@@ -39,9 +42,9 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t border-gray-200 bg-white p-3 shrink-0">
+    <div className="p-3 shrink-0">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-end gap-2 border border-gray-300 rounded-xl p-2 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-colors">
+        <div className="flex items-end gap-2 bg-white/80 backdrop-blur-xl border border-white/60 rounded-2xl p-2.5 focus-within:border-brand-500/40 focus-within:ring-4 focus-within:ring-brand-500/10 focus-within:shadow-glow transition-all">
           <textarea
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -49,25 +52,25 @@ export function ChatInput({
             placeholder={placeholder}
             disabled={disabled || sending}
             rows={1}
-            className="flex-1 resize-none bg-transparent outline-none text-sm py-1.5 px-1 max-h-32 disabled:opacity-50"
+            className="flex-1 resize-none bg-transparent outline-none text-sm py-1.5 px-2 max-h-32 disabled:opacity-50 text-slate-700 placeholder:text-slate-400"
             style={{ minHeight: '32px' }}
           />
           <button
             onClick={handleSend}
             disabled={disabled || sending || !value.trim()}
             className={clsx(
-              'p-2 rounded-lg text-white transition-colors shrink-0',
+              'p-2.5 rounded-xl text-white transition-all shrink-0',
               disabled || sending || !value.trim()
-                ? 'bg-gray-300 cursor-not-allowed'
-                : 'bg-indigo-600 hover:bg-indigo-700',
+                ? 'bg-slate-200 cursor-not-allowed'
+                : 'bg-gradient-to-r from-brand-500 to-violet-500 hover:from-brand-600 hover:to-violet-600 hover:shadow-glow active:scale-95',
             )}
-            title="发送"
+            title={t('chat.send')}
           >
             <Send size={16} />
           </button>
         </div>
-        <p className="text-xs text-gray-400 mt-1.5 text-center">
-          Enter 发送，Shift + Enter 换行
+        <p className="text-xs text-slate-400 mt-2 text-center">
+          {t('chat.shortcutHint')}
         </p>
       </div>
     </div>

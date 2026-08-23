@@ -1,5 +1,6 @@
 /**
  * 数据源选择器
+ * 玻璃质感风格
  *
  * 在聊天输入框上方展示，用户可以选择要查询的数据源。
  */
@@ -7,6 +8,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Database, ChevronDown, Loader2 } from 'lucide-react'
 import type { Datasource } from '../../lib/types'
 import { clsx } from '../../lib/utils'
+import { useTranslation } from '../../i18n'
 
 function formatConnectionInfo(ds: Datasource): string {
   if (ds.type === 'sqlite') {
@@ -33,6 +35,7 @@ export function DatasourceSelector({
   loading = false,
   disabled = false,
 }: DatasourceSelectorProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -52,12 +55,12 @@ export function DatasourceSelector({
   const selected = datasources.find((d) => d.id === value) || null
 
   const displayText = loading
-    ? '加载中...'
+    ? t('datasource.loading')
     : datasources.length === 0
-      ? '暂无数据源'
+      ? t('datasource.noData')
       : selected
         ? selected.name
-        : '选择数据源'
+        : t('datasource.select')
 
   const handleSelect = (id: string) => {
     onChange(id)
@@ -74,31 +77,31 @@ export function DatasourceSelector({
         onClick={() => !disabled && !loading && datasources.length > 0 && setOpen(!open)}
         disabled={disabled || loading || datasources.length === 0}
         className={clsx(
-          'flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors w-full',
+          'flex items-center gap-2 px-3.5 py-2 text-sm rounded-xl border transition-all w-full',
           disabled || loading || datasources.length === 0
-            ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
-            : 'bg-white border-gray-300 text-gray-700 hover:border-indigo-400 hover:ring-2 hover:ring-indigo-100 cursor-pointer',
+            ? 'bg-white/30 border-white/40 text-slate-400 cursor-not-allowed'
+            : 'bg-white/70 backdrop-blur border-white/60 text-slate-700 hover:border-brand-400/50 hover:ring-2 hover:ring-brand-500/10 cursor-pointer shadow-glass-sm',
         )}
       >
         {loading ? (
-          <Loader2 size={14} className="animate-spin text-gray-400 shrink-0" />
+          <Loader2 size={14} className="animate-spin text-slate-400 shrink-0" />
         ) : (
           <Database
             size={14}
             className={clsx(
               'shrink-0',
-              datasources.length === 0 ? 'text-gray-300' : 'text-indigo-500',
+              datasources.length === 0 ? 'text-slate-300' : 'text-brand-500',
             )}
           />
         )}
-        <span className="flex-1 text-left truncate">{displayText}</span>
+        <span className="flex-1 text-left truncate font-medium">{displayText}</span>
         {selected && (
-          <span className="text-[10px] text-gray-400 font-mono truncate max-w-[180px]">
+          <span className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">
             {formatConnectionInfo(selected)}
           </span>
         )}
         {selected && (
-          <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-mono shrink-0">
+          <span className="text-[10px] bg-brand-500/10 text-brand-600 px-2 py-0.5 rounded-xl font-medium font-mono shrink-0">
             {selected.type}
           </span>
         )}
@@ -106,34 +109,34 @@ export function DatasourceSelector({
           <ChevronDown
             size={14}
             className={clsx(
-              'text-gray-400 shrink-0 transition-transform',
+              'text-slate-400 shrink-0 transition-transform',
               open && 'rotate-180',
             )}
           />
         )}
       </button>
 
-      {/* 下拉菜单 */}
+      {/* 下拉菜单 - 玻璃质感 */}
       {open && datasources.length > 0 && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+        <div className="absolute bottom-full left-0 right-0 mb-2 bg-white/80 backdrop-blur-xl border border-white/60 rounded-2xl shadow-glass-lg z-50 max-h-64 overflow-y-auto p-1">
           {datasources.map((ds) => (
             <button
               key={ds.id}
               type="button"
               onClick={() => handleSelect(ds.id)}
               className={clsx(
-                'w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-indigo-50 transition-colors',
-                ds.id === value && 'bg-indigo-50 text-indigo-700',
+                'w-full text-left px-3 py-2.5 text-sm flex items-center gap-2 hover:bg-brand-500/10 transition-all rounded-xl',
+                ds.id === value && 'bg-brand-500/10 text-brand-700',
               )}
             >
-              <Database size={14} className="text-indigo-500 shrink-0" />
+              <Database size={14} className="text-brand-500 shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="truncate font-medium">{ds.name}</div>
-                <div className="text-[11px] text-gray-400 font-mono truncate">
+                <div className="truncate font-medium text-slate-700">{ds.name}</div>
+                <div className="text-[11px] text-slate-400 font-mono truncate">
                   {formatConnectionInfo(ds)}
                 </div>
               </div>
-              <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-mono shrink-0">
+              <span className="text-[10px] bg-brand-500/10 text-brand-600 px-2 py-0.5 rounded-xl font-medium font-mono shrink-0">
                 {ds.type}
               </span>
             </button>

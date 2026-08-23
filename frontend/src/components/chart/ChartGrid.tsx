@@ -1,5 +1,6 @@
 /**
  * 图表网格容器
+ * 玻璃质感风格
  * 排列多个图表
  */
 import { BarChart3 } from 'lucide-react'
@@ -25,7 +26,7 @@ export function ChartGrid({ viz, result }: ChartGridProps) {
   return (
     <div className="space-y-3">
       {isLargeDataset && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50/80 backdrop-blur border border-amber-200/60 rounded-2xl text-xs text-amber-700">
           <BarChart3 size={14} />
           <span>
             数据量较大（{rowCount.toLocaleString()} 行），图表仅展示部分数据，以表格为准
@@ -46,18 +47,18 @@ export function ChartGrid({ viz, result }: ChartGridProps) {
         {charts.map((chart, index) => (
           <div
             key={index}
-            className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm"
+            className="rounded-2xl border border-white/60 bg-white/70 backdrop-blur-xl overflow-hidden shadow-glass hover:shadow-glass-lg transition-all"
           >
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-white/40 flex items-center justify-between bg-white/30">
               <div className="flex items-center gap-2">
-                <BarChart3 size={14} className="text-gray-400" />
-                <h3 className="text-sm font-medium text-gray-700">{chart.title}</h3>
+                <BarChart3 size={14} className="text-brand-500" />
+                <h3 className="text-sm font-medium text-slate-700">{chart.title}</h3>
               </div>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-slate-400 bg-white/60 px-2 py-0.5 rounded-xl">
                 {CHART_TYPE_LABELS[chart.type]}
               </span>
             </div>
-            <div className="p-3">
+            <div className="p-4">
               <ChartRenderer
                 chart={chart}
                 columns={result.columns}

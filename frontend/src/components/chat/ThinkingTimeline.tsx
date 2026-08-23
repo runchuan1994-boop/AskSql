@@ -1,5 +1,6 @@
 /**
  * 思考过程时间线
+ * 玻璃质感风格
  *
  * 以垂直时间线形式展示 Agent 每个步骤的状态和详情：
  * - 流式中默认展开，显示完整时间线
@@ -11,6 +12,7 @@ import { Sparkles, ChevronDown, ChevronRight, CheckCircle2, Circle, XCircle } fr
 import type { ThinkingStep } from '../../lib/types'
 import { StepDetailRenderer } from './StepDetailRenderer'
 import { clsx } from '../../lib/utils'
+import { useTranslation } from '../../i18n'
 
 interface ThinkingTimelineProps {
   steps: ThinkingStep[]
@@ -25,16 +27,16 @@ function StepIcon({ status }: { status: ThinkingStep['status'] }) {
     case 'active':
       return (
         <div className="flex items-center gap-0.5 shrink-0">
-          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-indigo-500" />
-          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-indigo-500" />
-          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-indigo-500" />
+          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-brand-500" />
+          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-brand-500" />
+          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-brand-500" />
         </div>
       )
     case 'error':
       return <XCircle size={14} className="text-red-500 shrink-0" />
     case 'pending':
     default:
-      return <Circle size={14} className="text-gray-300 shrink-0" />
+      return <Circle size={14} className="text-slate-300 shrink-0" />
   }
 }
 
@@ -61,23 +63,23 @@ function StepRow({ step }: { step: ThinkingStep }) {
       <div
         className={clsx(
           'flex items-center gap-2 text-sm leading-5',
-          canExpand && 'cursor-pointer hover:bg-gray-50 -mx-1 px-1 py-0.5 rounded-md transition-colors',
+          canExpand && 'cursor-pointer hover:bg-white/50 -mx-1 px-1 py-0.5 rounded-xl transition-all',
           isError && 'text-red-600',
-          isDone && 'text-gray-500',
-          isActive && 'text-indigo-600 font-medium',
-          step.status === 'pending' && 'text-gray-300',
+          isDone && 'text-slate-500',
+          isActive && 'text-brand-600 font-medium',
+          step.status === 'pending' && 'text-slate-300',
         )}
         onClick={toggleExpand}
       >
         <StepIcon status={step.status} />
         <span className="flex-1 truncate">{step.name}</span>
         {step.duration_ms !== undefined && isDone && (
-          <span className="text-[11px] text-gray-400 font-normal shrink-0">
+          <span className="text-[11px] text-slate-400 font-normal shrink-0">
             {step.duration_ms} ms
           </span>
         )}
         {canExpand && (
-          <span className="text-gray-300 shrink-0">
+          <span className="text-slate-300 shrink-0">
             {shouldExpand ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </span>
         )}
@@ -85,7 +87,7 @@ function StepRow({ step }: { step: ThinkingStep }) {
 
       {/* 详情面板 */}
       {shouldExpand && hasDetail && (
-        <div className="ml-6 mt-2 mb-2 pl-3 border-l-2 border-gray-100">
+        <div className="ml-6 mt-2 mb-2 pl-3 border-l-2 border-brand-100">
           <StepDetailRenderer step={step} />
         </div>
       )}
@@ -105,13 +107,9 @@ function getStats(steps: ThinkingStep[]) {
 }
 
 export function ThinkingTimeline({ steps, isStreaming }: ThinkingTimelineProps) {
+  const { t } = useTranslation()
   // 流式中：展开；完成后：折叠为摘要
   const [collapsed, setCollapsed] = useState(false)
-
-  // 当从流式切换到完成时，自动折叠
-  // 但要等内容稳定后再折叠，给用户一点时间看
-  // 这里用一个简单策略：isStreaming 变 false 时 collapsed 自动变 true
-  // 用户可以手动展开查看
 
   const { totalSteps, completedSteps, totalMs } = getStats(steps)
   const hasSteps = steps.length > 0
@@ -121,20 +119,20 @@ export function ThinkingTimeline({ steps, isStreaming }: ThinkingTimelineProps) 
     return (
       <div className="flex gap-3">
         {/* 头像占位 */}
-        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+        <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 text-emerald-600 flex items-center justify-center shrink-0">
           <Sparkles size={16} />
         </div>
         <div className="flex-1 max-w-[85%]">
           <button
             onClick={() => setCollapsed(false)}
-            className="w-full text-left bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-500 hover:border-gray-300 hover:text-gray-700 transition-colors flex items-center gap-2"
+            className="w-full text-left bg-white/70 backdrop-blur-xl border border-white/60 rounded-2xl px-4 py-2.5 text-sm text-slate-500 hover:bg-white/90 hover:border-white/80 transition-all flex items-center gap-2 shadow-glass"
           >
             <CheckCircle2 size={14} className="text-emerald-500" />
             <span>
-              思考完成 · {completedSteps} 步 ·{' '}
+              {t('thinking.summary')} · {completedSteps} {t('thinking.steps')} ·{' '}
               {totalMs >= 1000 ? `${(totalMs / 1000).toFixed(1)}s` : `${totalMs}ms`}
             </span>
-            <ChevronDown size={14} className="ml-auto text-gray-400" />
+            <ChevronDown size={14} className="ml-auto text-slate-400" />
           </button>
         </div>
       </div>
@@ -144,26 +142,26 @@ export function ThinkingTimeline({ steps, isStreaming }: ThinkingTimelineProps) 
   return (
     <div className="flex gap-3">
       {/* 头像占位 */}
-      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+      <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 text-emerald-600 flex items-center justify-center shrink-0">
         <Sparkles size={16} />
       </div>
 
       <div className="flex-1 max-w-[85%]">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-xs text-gray-400">
-            {isStreaming ? '助手思考中...' : '思考过程'}
+          <div className="text-xs text-slate-400">
+            {isStreaming ? t('thinking.thinking') : t('thinking.title')}
           </div>
           {!isStreaming && hasSteps && (
             <button
               onClick={() => setCollapsed(true)}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
             >
-              收起
+              {t('thinking.collapse')}
             </button>
           )}
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
+        <div className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-2xl p-3.5 shadow-glass">
           {/* 步骤时间线 */}
           {hasSteps ? (
             <div className="space-y-1.5">
@@ -172,21 +170,21 @@ export function ThinkingTimeline({ steps, isStreaming }: ThinkingTimelineProps) 
               ))}
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-sm text-gray-400">
+            <div className="flex items-center gap-2 text-sm text-slate-400">
               <StepIcon status="active" />
-              <span>准备中...</span>
+              <span>{t('thinking.prep')}</span>
             </div>
           )}
 
           {/* 进度统计 */}
           {hasSteps && isStreaming && (
-            <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+            <div className="mt-3 pt-2.5 border-t border-white/40 flex items-center justify-between text-xs text-slate-400">
               <span>
-                {completedSteps}/{totalSteps} 步
+                {completedSteps}/{totalSteps} {t('thinking.steps')}
               </span>
               {totalMs > 0 && (
                 <span>
-                  已用{' '}
+                  {t('thinking.elapsed')}{' '}
                   {totalMs >= 1000 ? `${(totalMs / 1000).toFixed(1)}s` : `${totalMs}ms`}
                 </span>
               )}

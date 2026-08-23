@@ -1,10 +1,12 @@
 /**
  * 澄清问题卡片
+ * 玻璃质感风格
  *
  * 当 agent 需要向用户澄清问题时展示，列出所有待确认的问题。
  */
 import { HelpCircle, CheckCircle2 } from 'lucide-react'
 import { clsx } from '../../lib/utils'
+import { useTranslation } from '../../i18n'
 
 interface ClarificationCardProps {
   questions: string[]
@@ -12,13 +14,14 @@ interface ClarificationCardProps {
 }
 
 export function ClarificationCard({ questions, resolved = false }: ClarificationCardProps) {
+  const { t } = useTranslation()
   return (
     <div
       className={clsx(
-        'rounded-lg border px-4 py-3 space-y-2',
+        'rounded-2xl border px-4 py-3.5 space-y-2.5',
         resolved
-          ? 'bg-gray-50 border-gray-200 opacity-70'
-          : 'bg-amber-50 border-amber-200',
+          ? 'bg-slate-50/80 backdrop-blur border-slate-200/60 opacity-70'
+          : 'bg-amber-50/80 backdrop-blur border-amber-200/60',
       )}
     >
       {/* 标题 */}
@@ -31,10 +34,10 @@ export function ClarificationCard({ questions, resolved = false }: Clarification
         <span
           className={clsx(
             'text-sm font-medium',
-            resolved ? 'text-gray-500' : 'text-amber-800',
+            resolved ? 'text-slate-500' : 'text-amber-800',
           )}
         >
-          {resolved ? '已澄清' : '需要向您确认几个问题'}
+          {resolved ? t('clarification.resolved') : t('clarification.needConfirm')}
         </span>
       </div>
 
@@ -45,7 +48,7 @@ export function ClarificationCard({ questions, resolved = false }: Clarification
             key={i}
             className={clsx(
               'text-sm leading-relaxed',
-              resolved ? 'text-gray-500' : 'text-amber-900',
+              resolved ? 'text-slate-500' : 'text-amber-900',
             )}
           >
             {q}
@@ -56,7 +59,7 @@ export function ClarificationCard({ questions, resolved = false }: Clarification
       {/* 提示 */}
       {!resolved && (
         <p className="text-xs text-amber-600 pt-1">
-          请在下方输入框中回复你的想法，我会根据你的回答继续查询。
+          {t('clarification.hint')}
         </p>
       )}
     </div>

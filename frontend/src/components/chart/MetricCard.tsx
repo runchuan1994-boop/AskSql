@@ -1,5 +1,6 @@
 /**
  * 指标卡片组件
+ * 玻璃质感风格
  */
 import type { ChartSpec } from '../../lib/types'
 
@@ -32,11 +33,13 @@ export function MetricCard({ chart, columns, rows }: MetricCardProps) {
         : String(value)
 
   return (
-    <div className="w-full h-40 rounded-lg border border-gray-200 bg-gradient-to-b from-indigo-50 to-white p-5 flex flex-col justify-center">
-      <div className="text-sm text-gray-500 font-medium">{chart.title}</div>
-      <div className="text-4xl font-bold text-indigo-600 mt-2">{displayValue}</div>
+    <div className="w-full h-40 rounded-2xl border border-white/60 bg-gradient-to-br from-brand-500/10 via-white/70 to-violet-500/10 backdrop-blur-xl p-6 flex flex-col justify-center shadow-glass hover:shadow-glass-lg transition-all">
+      <div className="text-sm text-slate-500 font-medium">{chart.title}</div>
+      <div className="text-4xl font-bold bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent mt-2">
+        {displayValue}
+      </div>
       {chart.description && (
-        <div className="text-xs text-gray-400 mt-2">{chart.description}</div>
+        <div className="text-xs text-slate-400 mt-2">{chart.description}</div>
       )}
     </div>
   )

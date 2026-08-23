@@ -1,5 +1,6 @@
 /**
  * 聊天主面板
+ * 玻璃质感风格
  *
  * - 消息列表
  * - 输入框
@@ -7,13 +8,14 @@
  * - 如无会话，输入第一条消息时自动创建
  */
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquarePlus } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { useChat } from '../../hooks/useChat'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { DatasourceSelector } from './DatasourceSelector'
 import type { Session, Datasource } from '../../lib/types'
 import { createSession, listDatasources } from '../../lib/api'
+import { useTranslation } from '../../i18n'
 
 interface ChatPanelProps {
   projectId: string
@@ -22,6 +24,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ projectId, session, onSessionCreated }: ChatPanelProps) {
+  const { t } = useTranslation()
   const {
     messages,
     isLoading,
@@ -111,11 +114,11 @@ export function ChatPanel({ projectId, session, onSessionCreated }: ChatPanelPro
   const inputDisabled = (isStreaming && !awaitingClarification) || !!pendingFirstMessage || !hasDatasources
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
-      {/* 会话标题栏 */}
+    <div className="flex-1 flex flex-col min-w-0">
+      {/* 会话标题栏 - 玻璃质感 */}
       {session && (
-        <div className="h-12 border-b border-gray-200 bg-white flex items-center px-4 shrink-0">
-          <span className="text-sm font-medium text-gray-700 truncate">
+        <div className="h-12 border-b border-white/30 bg-white/40 backdrop-blur-lg flex items-center px-5 shrink-0">
+          <span className="text-sm font-medium text-slate-600 truncate">
             {session.title}
           </span>
         </div>
@@ -135,15 +138,15 @@ export function ChatPanel({ projectId, session, onSessionCreated }: ChatPanelPro
         )}
       </div>
 
-      {/* 错误提示 */}
+      {/* 错误提示 - 玻璃质感 */}
       {error && (
-        <div className="px-4 py-2 bg-red-50 text-red-600 text-sm border-t border-red-100">
-          错误: {error}
+        <div className="px-4 py-2.5 bg-red-50/80 backdrop-blur text-red-600 text-sm border-t border-red-100/60">
+          {t('chat.errorPrefix')}: {error}
         </div>
       )}
 
-      {/* 数据源选择器 + 输入框 */}
-      <div className="border-t border-gray-200 bg-white shrink-0">
+      {/* 数据源选择器 + 输入框 - 玻璃质感底部 */}
+      <div className="border-t border-white/40 bg-white/60 backdrop-blur-xl shrink-0">
         <div className="max-w-4xl mx-auto px-3 pt-3">
           <DatasourceSelector
             datasources={datasources}
@@ -158,10 +161,10 @@ export function ChatPanel({ projectId, session, onSessionCreated }: ChatPanelPro
           disabled={inputDisabled}
           placeholder={
             !hasDatasources
-              ? '请先连接数据源...'
+              ? t('chat.placeholder.noDatasource')
               : awaitingClarification
-                ? '请回答澄清问题，按 Enter 发送...'
-                : '输入你的问题，按 Enter 发送...'
+                ? t('chat.placeholder.clarification')
+                : t('chat.placeholder.default')
           }
         />
       </div>
@@ -170,21 +173,36 @@ export function ChatPanel({ projectId, session, onSessionCreated }: ChatPanelPro
 }
 
 function EmptyState() {
+  const { t } = useTranslation()
+  const samples = [
+    t('samples.totalUsers'),
+    t('samples.dau7d'),
+    t('samples.top10Orders'),
+    t('samples.deptHeadcount'),
+  ]
+
   return (
-    <div className="h-full flex flex-col items-center justify-center text-gray-400 px-6">
-      <MessageSquarePlus size={48} strokeWidth={1} className="text-gray-300" />
-      <p className="mt-3 text-sm">在下方输入问题，开始你的第一次 NL2SQL 对话</p>
-      <div className="mt-6 grid grid-cols-2 gap-2 max-w-md">
-        {['查询总用户数', '最近 7 天的日活', '订单金额排名 top10', '各部门人数统计'].map(
-          (q) => (
+    <div className="h-full flex flex-col items-center justify-center text-slate-400 px-6 relative">
+      {/* 装饰性渐变光晕 */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-gradient-to-r from-brand-400/20 to-violet-400/20 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="relative z-10 flex flex-col items-center">
+        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 to-violet-500 text-white flex items-center justify-center shadow-glow-lg mb-4">
+          <Sparkles size={28} />
+        </div>
+        <p className="text-base font-medium text-slate-600">{t('chat.emptyTitle')}</p>
+        <p className="text-sm text-slate-400 mt-1">{t('chat.emptySubtitle')}</p>
+
+        <div className="mt-8 grid grid-cols-2 gap-3 max-w-lg w-full">
+          {samples.map((q) => (
             <div
               key={q}
-              className="text-xs bg-white border border-gray-200 rounded-md px-3 py-2 text-gray-500"
+              className="text-sm bg-white/60 backdrop-blur border border-white/60 rounded-2xl px-4 py-3 text-slate-500 hover:bg-white/80 hover:border-brand-300/40 transition-all cursor-default shadow-glass"
             >
               {q}
             </div>
-          ),
-        )}
+          ))}
+        </div>
       </div>
     </div>
   )

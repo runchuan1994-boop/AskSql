@@ -1,5 +1,6 @@
 /**
  * 单条聊天消息
+ * 玻璃质感风格
  */
 import { User, Bot } from 'lucide-react'
 import type { Message } from '../../lib/types'
@@ -8,12 +9,14 @@ import { ResultTable } from './ResultTable'
 import { ChartGrid } from '../chart/ChartGrid'
 import { ClarificationCard } from './ClarificationCard'
 import { clsx, formatTime } from '../../lib/utils'
+import { useTranslation } from '../../i18n'
 
 interface ChatMessageProps {
   message: Message
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
+  const { t } = useTranslation()
   const isUser = message.role === 'user'
 
   return (
@@ -26,10 +29,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
       {/* 头像 */}
       <div
         className={clsx(
-          'w-8 h-8 rounded-full flex items-center justify-center shrink-0',
+          'w-8 h-8 rounded-2xl flex items-center justify-center shrink-0',
           isUser
-            ? 'bg-indigo-100 text-indigo-600'
-            : 'bg-emerald-100 text-emerald-600',
+            ? 'bg-gradient-to-br from-brand-500/10 to-violet-500/10 text-brand-500'
+            : 'bg-gradient-to-br from-emerald-500/10 to-teal-500/10 text-emerald-600',
         )}
       >
         {isUser ? <User size={16} /> : <Bot size={16} />}
@@ -42,18 +45,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
           isUser ? 'flex flex-col items-end' : '',
         )}
       >
-        <div className="text-xs text-gray-400 mb-1">
-          {isUser ? '你' : '助手'}
+        <div className="text-xs text-slate-400 mb-1">
+          {isUser ? t('message.you') : t('message.assistant')}
           <span className="ml-2">{formatTime(message.created_at)}</span>
         </div>
 
         {message.content && (
           <div
             className={clsx(
-              'rounded-lg px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words',
+              'rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words',
               isUser
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-200 text-gray-800',
+                ? 'bg-gradient-to-r from-brand-500 to-violet-500 text-white shadow-glass'
+                : 'bg-white/80 backdrop-blur-xl border border-white/60 text-slate-800 shadow-glass',
             )}
           >
             {message.content}
@@ -70,16 +73,16 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </div>
         )}
 
-        {/* 查询假设说明 */}
+        {/* 查询假设说明 - 玻璃质感 */}
         {message.query_assumptions && message.query_assumptions.length > 0 && (
-          <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800">
-            <div className="font-medium mb-1 text-amber-700">💡 基于以下假设分析</div>
+          <div className="mt-2 px-4 py-3 bg-amber-50/80 backdrop-blur border border-amber-200/60 rounded-2xl text-xs text-amber-800">
+            <div className="font-medium mb-1.5 text-amber-700">{t('message.assumptions.title')}</div>
             <ul className="list-disc list-inside space-y-0.5">
               {message.query_assumptions.map((a, i) => (
                 <li key={i}>{a}</li>
               ))}
             </ul>
-            <div className="mt-1 text-amber-600">如果假设不对，可以告诉我调整。</div>
+            <div className="mt-1.5 text-amber-600">{t('message.assumptions.hint')}</div>
           </div>
         )}
 

@@ -1,5 +1,6 @@
 /**
  * 查询结果表格
+ * 玻璃质感风格
  * 使用 @tanstack/react-table，支持服务端分页
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -12,6 +13,7 @@ import {
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { QueryResult } from '../../lib/types'
 import { getResultPage } from '../../lib/api'
+import { useTranslation } from '../../i18n'
 
 interface ResultTableProps {
   result: QueryResult
@@ -22,6 +24,7 @@ interface ResultTableProps {
 const PREVIEW_ROWS = 100
 
 export function ResultTable({ result, messageId, defaultPageSize = 100 }: ResultTableProps) {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(defaultPageSize)
   const [pageData, setPageData] = useState<unknown[][]>(
@@ -96,7 +99,7 @@ export function ResultTable({ result, messageId, defaultPageSize = 100 }: Result
           cell: (info) => {
             const val = info.getValue()
             if (val === null || val === undefined) {
-              return <span className="text-gray-400">NULL</span>
+              return <span className="text-slate-400">{t('result.null')}</span>
             }
             if (typeof val === 'object') {
               return JSON.stringify(val)
@@ -124,11 +127,11 @@ export function ResultTable({ result, messageId, defaultPageSize = 100 }: Result
     !messageId && result.row_count > PREVIEW_ROWS && result.rows.length <= PREVIEW_ROWS
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-      <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-xs">
-        <span className="text-gray-600 font-medium">查询结果</span>
-        <span className="text-gray-400">
-          共 {total.toLocaleString()} 行
+    <div className="rounded-2xl border border-white/60 bg-white/70 backdrop-blur-xl overflow-hidden shadow-glass">
+      <div className="px-4 py-2.5 bg-white/50 backdrop-blur border-b border-white/40 flex items-center justify-between text-xs">
+        <span className="text-slate-600 font-medium">{t('result.title')}</span>
+        <span className="text-slate-400">
+          {t('result.totalRows', { count: total.toLocaleString() })}
           {result.duration_ms !== undefined &&
             ` · ${result.duration_ms}ms`}
         </span>
@@ -136,18 +139,18 @@ export function ResultTable({ result, messageId, defaultPageSize = 100 }: Result
 
       <div className="overflow-x-auto max-h-80 overflow-y-auto">
         {loading ? (
-          <div className="h-40 flex items-center justify-center text-gray-400 text-sm">
-            加载中...
+          <div className="h-40 flex items-center justify-center text-slate-400 text-sm">
+            {t('result.loading')}
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0 z-10">
+            <thead className="bg-white/60 backdrop-blur sticky top-0 z-10">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap"
+                      className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 border-b border-white/40 whitespace-nowrap"
                       style={{ width: header.getSize() }}
                     >
                       {flexRender(header.column.columnDef.header, header.getContext())}
@@ -161,13 +164,13 @@ export function ResultTable({ result, messageId, defaultPageSize = 100 }: Result
                 <tr
                   key={row.id}
                   className={
-                    rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                    rowIdx % 2 === 0 ? 'bg-transparent' : 'bg-white/30'
                   }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      className="px-3 py-1.5 text-gray-700 border-b border-gray-100 font-mono text-xs"
+                      className="px-3 py-2 text-slate-700 border-b border-white/20 font-mono text-xs"
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
@@ -180,26 +183,26 @@ export function ResultTable({ result, messageId, defaultPageSize = 100 }: Result
       </div>
 
       {showLimitedWarning && (
-        <div className="px-3 py-2 bg-amber-50 border-t border-amber-100 text-xs text-amber-700">
-          仅显示前 {PREVIEW_ROWS} 行，更多数据请刷新后查看
+        <div className="px-4 py-2.5 bg-amber-50/80 backdrop-blur border-t border-amber-100/60 text-xs text-amber-700">
+          {t('result.limitedWarning', { count: PREVIEW_ROWS })}
         </div>
       )}
 
       {showPagination && (
-        <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs">
-          <div className="text-gray-500">
-            第 {page} / {totalPages} 页
+        <div className="px-4 py-2.5 bg-white/50 backdrop-blur border-t border-white/40 flex items-center justify-between text-xs">
+          <div className="text-slate-500">
+            {t('result.page', { current: page, total: totalPages })}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
-              className="px-2 py-1 rounded border border-gray-300 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-colors"
+              className="px-2.5 py-1.5 rounded-xl border border-white/60 bg-white/70 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/90 transition-all"
               onClick={() => loadPage(page - 1)}
               disabled={!canPrev || loading}
             >
               <ChevronLeft size={14} />
             </button>
             <select
-              className="px-2 py-1 rounded border border-gray-300 text-gray-600 bg-white"
+              className="px-2.5 py-1.5 rounded-xl border border-white/60 bg-white/70 text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               value={pageSize}
               onChange={(e) => {
                 const newSize = Number(e.target.value)
@@ -207,13 +210,13 @@ export function ResultTable({ result, messageId, defaultPageSize = 100 }: Result
                 setPage(1)
               }}
             >
-              <option value={50}>50 条/页</option>
-              <option value={100}>100 条/页</option>
-              <option value={200}>200 条/页</option>
-              <option value={500}>500 条/页</option>
+              <option value={50}>{t('result.pageSize', { size: 50 })}</option>
+              <option value={100}>{t('result.pageSize', { size: 100 })}</option>
+              <option value={200}>{t('result.pageSize', { size: 200 })}</option>
+              <option value={500}>{t('result.pageSize', { size: 500 })}</option>
             </select>
             <button
-              className="px-2 py-1 rounded border border-gray-300 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-colors"
+              className="px-2.5 py-1.5 rounded-xl border border-white/60 bg-white/70 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/90 transition-all"
               onClick={() => loadPage(page + 1)}
               disabled={!canNext || loading}
             >

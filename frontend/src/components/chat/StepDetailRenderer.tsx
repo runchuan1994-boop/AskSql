@@ -15,21 +15,21 @@ interface StepDetailRendererProps {
 function KVRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2 text-xs py-1">
-      <span className="text-gray-400 shrink-0 min-w-[60px]">{label}</span>
-      <span className="text-gray-700 flex-1 break-all">{value}</span>
+      <span className="text-slate-400 shrink-0 min-w-[60px]">{label}</span>
+      <span className="text-slate-700 flex-1 break-all">{value}</span>
     </div>
   )
 }
 
 // 表名 tag 列表
 function TagList({ items }: { items: string[] }) {
-  if (!items?.length) return <span className="text-gray-400 text-xs">无</span>
+  if (!items?.length) return <span className="text-slate-400 text-xs">无</span>
   return (
     <div className="flex flex-wrap gap-1.5">
       {items.map((item, i) => (
         <span
           key={i}
-          className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded-md font-mono"
+          className="px-2 py-0.5 bg-brand-500/10 text-brand-600 text-xs rounded-xl font-mono font-medium"
         >
           {item}
         </span>
@@ -45,10 +45,10 @@ function ConfidenceBar({ value }: { value: number }) {
     pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-gray-500 font-medium w-10 text-right">{pct}%</span>
+      <span className="text-xs text-slate-500 font-medium w-10 text-right">{pct}%</span>
     </div>
   )
 }
@@ -68,7 +68,7 @@ function CopyText({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+      className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
       title="复制"
     >
       {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
@@ -93,19 +93,19 @@ function DispatchDetail({ detail }: { detail: Record<string, unknown> }) {
       <KVRow
         label="任务类型"
         value={
-          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded-md font-medium">
+          <span className="px-2.5 py-0.5 bg-brand-500/10 text-brand-600 text-xs rounded-xl font-medium">
             {intentLabel[intent] || intent}
           </span>
         }
       />
       <div>
-        <div className="text-xs text-gray-400 mb-1">置信度</div>
+        <div className="text-xs text-slate-400 mb-1">置信度</div>
         <ConfidenceBar value={confidence} />
       </div>
       {reasoning && (
         <div>
-          <div className="text-xs text-gray-400 mb-1">判断理由</div>
-          <div className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-md leading-relaxed">
+          <div className="text-xs text-slate-400 mb-1">判断理由</div>
+          <div className="text-xs text-slate-600 bg-white/60 backdrop-blur px-3 py-2 rounded-xl leading-relaxed border border-white/40">
             {reasoning}
           </div>
         </div>
@@ -156,7 +156,7 @@ function ProbeDetail({ detail }: { detail: Record<string, unknown> }) {
   const reason = detail.reason as string
 
   if (skipped) {
-    return <div className="text-xs text-gray-400">跳过：{reason}</div>
+    return <div className="text-xs text-slate-400">跳过：{reason}</div>
   }
 
   return (
@@ -164,12 +164,12 @@ function ProbeDetail({ detail }: { detail: Record<string, unknown> }) {
       {probedTables.length > 0 && <KVRow label="探查表" value={<TagList items={probedTables} />} />}
       {findings.length > 0 && (
         <div>
-          <div className="text-xs text-gray-400 mb-1">发现（{findings.length}）</div>
+          <div className="text-xs text-slate-400 mb-1">发现（{findings.length}）</div>
           <ul className="space-y-1">
             {findings.map((f, i) => (
               <li
                 key={i}
-                className="text-xs text-gray-600 bg-gray-50 px-2 py-1.5 rounded-md break-all"
+                className="text-xs text-slate-600 bg-white/60 backdrop-blur px-3 py-2 rounded-xl break-all border border-white/40"
               >
                 {f}
               </li>
@@ -186,15 +186,15 @@ function ClarifyDetail({ detail }: { detail: Record<string, unknown> }) {
   const questions = (detail.questions as string[]) || []
 
   if (!needsClarification) {
-    return <div className="text-xs text-emerald-600">✓ 无需澄清，直接进入 SQL 生成</div>
+    return <div className="text-xs text-emerald-600 font-medium">✓ 无需澄清，直接进入 SQL 生成</div>
   }
 
   return (
     <div>
-      <div className="text-xs text-gray-400 mb-1.5">需要澄清的问题（{questions.length}）</div>
+      <div className="text-xs text-slate-400 mb-1.5">需要澄清的问题（{questions.length}）</div>
       <ol className="space-y-1 list-decimal list-inside">
         {questions.map((q, i) => (
-          <li key={i} className="text-xs text-gray-600 pl-1">
+          <li key={i} className="text-xs text-slate-600 pl-1">
             {q}
           </li>
         ))}
@@ -232,7 +232,7 @@ function SqlExecutedDetail({ detail }: { detail: Record<string, unknown> }) {
 
   if (!success) {
     return (
-      <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-md">
+      <div className="text-xs text-red-600 bg-red-50/80 backdrop-blur px-3 py-2 rounded-xl border border-red-100/60">
         ✗ 执行失败
       </div>
     )
@@ -247,7 +247,7 @@ function SqlExecutedDetail({ detail }: { detail: Record<string, unknown> }) {
       )}
       {columns.length > 0 && (
         <div>
-          <div className="text-xs text-gray-400 mb-1">列名（{columns.length}）</div>
+          <div className="text-xs text-slate-400 mb-1">列名（{columns.length}）</div>
           <TagList items={columns} />
         </div>
       )}
@@ -266,32 +266,32 @@ function ReflectDetail({ detail }: { detail: Record<string, unknown> }) {
     <div className="space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
         {satisfied ? (
-          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-xs rounded-md font-medium">
+          <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 text-xs rounded-xl font-medium">
             ✓ 结果满意
           </span>
         ) : (
-          <span className="px-2 py-0.5 bg-amber-50 text-amber-600 text-xs rounded-md font-medium">
+          <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 text-xs rounded-xl font-medium">
             结果不满意
           </span>
         )}
         {needsRevision && (
-          <span className="px-2 py-0.5 bg-red-50 text-red-600 text-xs rounded-md font-medium">
+          <span className="px-2.5 py-0.5 bg-red-500/10 text-red-600 text-xs rounded-xl font-medium">
             需要修正
           </span>
         )}
         {iteration > 1 && (
-          <span className="text-xs text-gray-400">第 {iteration} 轮</span>
+          <span className="text-xs text-slate-400">第 {iteration} 轮</span>
         )}
       </div>
       {thought && (
-        <div className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-md leading-relaxed">
+        <div className="text-xs text-slate-600 bg-white/60 backdrop-blur px-3 py-2 rounded-xl leading-relaxed border border-white/40">
           {thought}
         </div>
       )}
       {suggestedFix && needsRevision && (
         <div>
-          <div className="text-xs text-gray-400 mb-1">修正建议</div>
-          <div className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-md">
+          <div className="text-xs text-slate-400 mb-1">修正建议</div>
+          <div className="text-xs text-amber-700 bg-amber-50/80 backdrop-blur px-3 py-2 rounded-xl border border-amber-100/60">
             {suggestedFix}
           </div>
         </div>
@@ -309,12 +309,12 @@ function VisualizeDetail({ detail }: { detail: Record<string, unknown> }) {
   const reason = detail.reason as string
 
   if (skipped) {
-    return <div className="text-xs text-gray-400">跳过：{reason}</div>
+    return <div className="text-xs text-slate-400">跳过：{reason}</div>
   }
 
   if (note) {
     return (
-      <div className="text-xs text-amber-600">
+      <div className="text-xs text-amber-600 font-medium">
         图表生成结果：{note}
       </div>
     )
@@ -325,18 +325,18 @@ function VisualizeDetail({ detail }: { detail: Record<string, unknown> }) {
       <KVRow label="图表数量" value={<span className="font-medium">{chartCount} 个</span>} />
       {titles.length > 0 && (
         <div>
-          <div className="text-xs text-gray-400 mb-1">图表列表</div>
+          <div className="text-xs text-slate-400 mb-1">图表列表</div>
           <ul className="space-y-1">
             {titles.map((title, i) => (
               <li
                 key={i}
-                className="text-xs text-gray-600 flex items-center gap-2 bg-gray-50 px-2 py-1.5 rounded-md"
+                className="text-xs text-slate-600 flex items-center gap-2 bg-white/60 backdrop-blur px-3 py-2 rounded-xl border border-white/40"
               >
-                <span className="w-5 h-5 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-medium">
+                <span className="w-5 h-5 rounded-lg bg-gradient-to-br from-brand-500 to-violet-500 text-white flex items-center justify-center text-[10px] font-medium">
                   {chartTypes[i]?.charAt(0).toUpperCase() || '?'}
                 </span>
                 <span className="flex-1 truncate">{title}</span>
-                <span className="text-gray-400 text-[10px]">{chartTypes[i] || ''}</span>
+                <span className="text-slate-400 text-[10px]">{chartTypes[i] || ''}</span>
               </li>
             ))}
           </ul>
@@ -379,7 +379,7 @@ function GenericDetail({ detail }: { detail: Record<string, unknown> }) {
       <div className="absolute top-2 right-2 z-10">
         <CopyText text={jsonStr} />
       </div>
-      <pre className="text-[11px] text-gray-600 bg-gray-50 p-3 rounded-md overflow-x-auto font-mono max-h-48 overflow-y-auto">
+      <pre className="text-[11px] text-slate-600 bg-white/60 backdrop-blur border border-white/40 p-3 rounded-xl overflow-x-auto font-mono max-h-48 overflow-y-auto">
         {jsonStr}
       </pre>
     </div>
@@ -391,7 +391,7 @@ export function StepDetailRenderer({ step }: StepDetailRendererProps) {
 
   if (status === 'error' && error_message) {
     return (
-      <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-md break-all">
+      <div className="text-xs text-red-600 bg-red-50/80 backdrop-blur px-3 py-2 rounded-xl border border-red-100/60 break-all">
         ✗ {error_message}
       </div>
     )

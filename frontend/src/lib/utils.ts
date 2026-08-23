@@ -7,7 +7,7 @@ export function clsx(...args: (string | false | null | undefined)[]): string {
   return args.filter(Boolean).join(' ')
 }
 
-/** 格式化时间戳 */
+/** 格式化时间戳 — 使用浏览器语言 */
 export function formatTime(isoString?: string): string {
   if (!isoString) return ''
   try {
@@ -17,10 +17,11 @@ export function formatTime(isoString?: string): string {
       d.getFullYear() === now.getFullYear() &&
       d.getMonth() === now.getMonth() &&
       d.getDate() === now.getDate()
+    const locale = navigator.language
     if (sameDay) {
-      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
     }
-    return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+    return d.toLocaleDateString(locale, { month: '2-digit', day: '2-digit' })
   } catch {
     return isoString
   }

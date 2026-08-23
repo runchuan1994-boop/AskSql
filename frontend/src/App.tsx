@@ -7,8 +7,10 @@ import { useEffect, useState } from 'react'
 import { AppLayout } from './components/layout/AppLayout'
 import { listProjects } from './lib/api'
 import type { Project, Session } from './lib/types'
+import { useTranslation } from './i18n'
 
 function App() {
+  const { t } = useTranslation()
   const [projects, setProjects] = useState<Project[]>([])
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [activeSession, setActiveSession] = useState<Session | null>(null)
@@ -40,8 +42,8 @@ function App() {
 
   if (loading) {
     return (
-      <div className="h-full w-full flex items-center justify-center text-gray-500">
-        加载中...
+      <div className="h-full w-full flex items-center justify-center text-slate-500">
+        {t('app.loading')}
       </div>
     )
   }
@@ -49,15 +51,15 @@ function App() {
   if (error) {
     return (
       <div className="h-full w-full flex items-center justify-center text-red-500">
-        错误: {error}
+        {t('app.error')}: {error}
       </div>
     )
   }
 
   if (!activeProject) {
     return (
-      <div className="h-full w-full flex items-center justify-center text-gray-500">
-        暂无项目，请先在后端创建项目并配置数据源。
+      <div className="h-full w-full flex items-center justify-center text-slate-500">
+        {t('app.noProject')}
       </div>
     )
   }
