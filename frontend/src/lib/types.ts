@@ -214,6 +214,42 @@ export interface VizSpec {
   charts: ChartSpec[]
 }
 
+// ---------- Schema 记忆 ----------
+export type MemoryType =
+  | 'column_description'
+  | 'table_description'
+  | 'metric_definition'
+  | 'term_mapping'
+  | 'join_hint'
+
+export type EntityType = 'table' | 'column' | 'metric' | 'term'
+
+export interface SchemaMemory {
+  id: string
+  datasource_id: string
+  memory_type: MemoryType
+  entity_type: EntityType | null
+  entity_name: string | null
+  content: string
+  raw_content: string | null
+  source: string
+  source_session_id: string | null
+  source_message_id: string | null
+  confidence: number
+  access_count: number
+  created_at: string
+  updated_at: string
+  is_active: number
+}
+
+export interface MemoryListResult {
+  items: SchemaMemory[]
+  total: number
+  page: number
+  page_size: number
+  has_more: boolean
+}
+
 // 分页结果
 export interface PaginatedResult {
   columns: string[]

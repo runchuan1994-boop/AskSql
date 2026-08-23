@@ -13,6 +13,7 @@ import {
   Columns,
   Key,
   Loader2,
+  Lightbulb,
 } from 'lucide-react'
 import { getSchemaOverview, getTableDetail } from '../../lib/api'
 import type {
@@ -22,6 +23,7 @@ import type {
 } from '../../lib/types'
 import { clsx } from '../../lib/utils'
 import { useTranslation } from '../../i18n'
+import { MemoryPanel } from './MemoryPanel'
 
 interface SchemaPanelProps {
   projectId: string
@@ -71,13 +73,58 @@ export function SchemaPanel({ projectId }: SchemaPanelProps) {
     setExpandedTables((prev) => ({ ...prev, [key]: !isExpanded }))
   }
 
+  // 收集所有表名（用于记忆面板的下拉选择）
+  const allTableNames = schemas.flatMap((ds) =>
+    ds.tables ? ds.tables.map((t) => t.name) : [],
+  )
+
+  const [activeTab, setActiveTab] = useState<'schema' | 'memory'>('schema')
+
+  // 默认选择第一个数据源用于记忆面板
+  const selectedDatasourceId = schemas[0]?.datasource_id || ''
+
   return (
     <div className="h-full flex flex-col">
-      <div className="px-4 py-2.5 border-b border-white/30 bg-white/50 backdrop-blur">
+      <div className="px-4 py-2.5 border-b border-white/30 bg-white/50 backdrop-blur flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-700">{t('schema.title')}</h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {/* Tab 切换 */}
+      <div className="flex border-b border-white/30 bg-white/30">
+        <button
+          onClick={() => setActiveTab('schema')}
+          className={clsx(
+            'flex-1 px-3 py-2 text-xs font-medium transition-colors relative',
+            activeTab === 'schema'
+              ? 'text-brand-600'
+              : 'text-slate-500 hover:text-slate-700',
+          )}
+        >
+          <Table2 size={13} className="inline-block mr-1 -mt-0.5" />
+          表结构
+          {activeTab === 'schema' && (
+            <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-brand-500 rounded-t-full" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('memory')}
+          className={clsx(
+            'flex-1 px-3 py-2 text-xs font-medium transition-colors relative',
+            activeTab === 'memory'
+              ? 'text-brand-600'
+              : 'text-slate-500 hover:text-slate-700',
+          )}
+        >
+          <Lightbulb size={13} className="inline-block mr-1 -mt-0.5" />
+          记忆
+          {activeTab === 'memory' && (
+            <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-brand-500 rounded-t-full" />
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'schema' && (
+        <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="p-4 text-center text-sm text-slate-400">{t('schema.loading')}</div>
         ) : schemas.length === 0 ? (
@@ -160,6 +207,22 @@ export function SchemaPanel({ projectId }: SchemaPanelProps) {
           </div>
         )}
       </div>
+
+      {/* 记忆 Tab */}
+      {activeTab === 'memory' && (
+        <div className="flex-1 overflow-hidden">
+          {selectedDatasourceId ? (
+            <MemoryPanel
+              datasourceId={selectedDatasourceId}
+              tableNames={allTableNames}
+            />
+          ) : (
+            <div className="p-4 text-center text-xs text-slate-400">
+              暂无数据源
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

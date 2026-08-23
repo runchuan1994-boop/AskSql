@@ -142,6 +142,40 @@ def init_db() -> None:
             ON agent_step_logs(agent_type, step_name)
         """)
 
+        # Schema 记忆表（用户纠错记忆）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS schema_memories (
+                id TEXT PRIMARY KEY,
+                datasource_id TEXT NOT NULL,
+                memory_type TEXT NOT NULL,
+                entity_type TEXT,
+                entity_name TEXT,
+                content TEXT NOT NULL,
+                raw_content TEXT,
+                source TEXT NOT NULL,
+                source_session_id TEXT,
+                source_message_id TEXT,
+                confidence REAL DEFAULT 0.8,
+                access_count INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                is_active INTEGER DEFAULT 1
+            )
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_datasource
+            ON schema_memories(datasource_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_entity
+            ON schema_memories(datasource_id, entity_type, entity_name)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_active
+            ON schema_memories(datasource_id, is_active)
+        """)
+
         conn.commit()
     finally:
         conn.close()

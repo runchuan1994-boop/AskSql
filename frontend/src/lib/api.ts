@@ -9,6 +9,10 @@ import type {
   DatasourceSchemaOverview,
   TableDetail,
   PaginatedResult,
+  SchemaMemory,
+  MemoryType,
+  EntityType,
+  MemoryListResult,
 } from './types'
 
 const BASE = '/api'
@@ -108,4 +112,60 @@ export function getTableDetail(
   return request<TableDetail>(
     `/schema/table/${encodeURIComponent(datasourceId)}/${encodeURIComponent(tableName)}`,
   )
+}
+
+// ---------- Schema 记忆 ----------
+export function listMemories(
+  datasourceId: string,
+  params: {
+    memory_type?: MemoryType
+    entity_type?: EntityType
+    search?: string
+    page?: number
+    page_size?: number
+  } = {},
+): Promise<MemoryListResult> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('datasource_id', datasourceId)
+  if (params.memory_type) searchParams.set('memory_type', params.memory_type)
+  if (params.entity_type) searchParams.set('entity_type', params.entity_type)
+  if (params.search) searchParams.set('search', params.search)
+  if (params.page) searchParams.set('page', String(params.page))
+  if (params.page_size) searchParams.set('page_size', String(params.page_size))
+  return request<MemoryListResult>(`/memories?${searchParams.toString()}`)
+}
+
+export function createMemory(data: {
+  datasource_id: string
+  memory_type: MemoryType
+  entity_type?: EntityType
+  entity_name?: string
+  content: string
+}): Promise<SchemaMemory> {
+  return request<SchemaMemory>('/memories', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function updateMemory(
+  memoryId: string,
+  data: Partial<{
+    content: string
+    memory_type: MemoryType
+    entity_type: EntityType
+    entity_name: string
+    confidence: number
+  }>,
+): Promise<SchemaMemory> {
+  return request<SchemaMemory>(`/memories/${encodeURIComponent(memoryId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export function deleteMemory(memoryId: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/memories/${encodeURIComponent(memoryId)}`, {
+    method: 'DELETE',
+  })
 }
