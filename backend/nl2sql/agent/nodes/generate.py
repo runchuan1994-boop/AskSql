@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from nl2sql.llm import Message, MessageRole
 from nl2sql.llm.factory import create_llm_client
-from nl2sql.schema import SchemaMatcher
+from ._schema_context import build_detailed_schema_context, inject_memories_into_context
 from ._step_utils import step_start, step_complete, step_error
 
 if TYPE_CHECKING:
@@ -54,80 +54,6 @@ def extract_sql_from_text(text: str) -> str:
     return text.strip()
 
 
-def _build_detailed_schema_context(state: dict) -> tuple[str, str]:
-    """Build detailed schema context and determine db_type.
-
-    Returns:
-        (schema_text, db_type)
-    """
-    # Determine which tables to use
-    intent_tables = []
-    if state.get("intent") and state.get("intent").tables:
-        intent_tables = [t.get("name", "") for t in state.get("intent").tables if isinstance(t, dict)]
-
-    matcher = SchemaMatcher(state["datasources"])
-
-    # If we have intent tables, use those; otherwise match by query
-    selected_matches = []
-    if intent_tables:
-        for ds in state["datasources"]:
-            for tname in intent_tables:
-                table = ds.db_schema.get_table(tname)
-                if table:
-                    from nl2sql.schema.matcher import TableMatch
-                    selected_matches.append(
-                        TableMatch(datasource_id=ds.datasource_id, table=table, score=10.0)
-                    )
-    if not selected_matches:
-        selected_matches = matcher.match_tables(state["user_query"], top_k=5)
-
-    # Determine db_type (use first datasource's type)
-    db_type = "mysql"
-    if state["datasources"]:
-        db_type = state["datasources"][0].datasource_type
-
-    if not selected_matches:
-        return "（无可用的表）", db_type
-
-    lines = []
-    current_ds = None
-    for m in selected_matches:
-        if m.datasource_id != current_ds:
-            ds = next(
-                (d for d in state["datasources"] if d.datasource_id == m.datasource_id),
-                None,
-            )
-            if ds:
-                lines.append(f"数据源: {ds.datasource_name} ({ds.datasource_id})")
-                lines.append(f"类型: {ds.datasource_type}")
-                current_ds = m.datasource_id
-
-        tbl = m.table
-        lines.append("")
-        lines.append(f"表: {tbl.name}")
-        lines.append(f"描述: {tbl.description}")
-        lines.append("列:")
-        for col in tbl.columns:
-            markers = []
-            if col.is_primary_key:
-                markers.append("PK")
-            if col.is_foreign_key:
-                markers.append(f"FK -> {col.foreign_key_table}.{col.foreign_key_column}")
-            marker_str = f" [{', '.join(markers)}]" if markers else ""
-            sem_type = f" ({col.semantic_type})" if col.semantic_type else ""
-            enum_str = ""
-            if col.enum_values:
-                enum_str = f" 枚举值: {', '.join(col.enum_values)}"
-            lines.append(f"  - {col.name}: {col.type}{marker_str}{sem_type} - {col.description}{enum_str}")
-
-        if tbl.examples:
-            lines.append("示例数据:")
-            for ex in tbl.examples:
-                lines.append(f"  {ex}")
-
-    return "\n".join(lines), db_type
-
-
 def _build_probe_findings_text(state: dict) -> str:
     """Build probe findings text for context."""
     if not state.get("probe_findings", []):
@@ -165,8 +91,28 @@ def generate_sql_node(state: dict) -> dict:
     t0 = step_start(state, "sql_generated", step_label)
 
     try:
-        schema_context, db_type = _build_detailed_schema_context(state)
+        schema_context, db_type = build_detailed_schema_context(state)
         probe_text = _build_probe_findings_text(state)
+
+        # 召回用户记忆并注入 schema context
+        memory_retriever = state.get("memory_retriever")
+        if memory_retriever and callable(memory_retriever):
+            related_table_names = []
+            if state.get("intent") and state.get("intent").tables:
+                related_table_names = [
+                    t.get("name", "") for t in state["intent"].tables
+                    if isinstance(t, dict)
+                ]
+            try:
+                memories = memory_retriever(
+                    query=state["user_query"],
+                    related_tables=related_table_names,
+                )
+                if memories:
+                    schema_context = inject_memories_into_context(schema_context, memories)
+            except Exception:
+                # 记忆召回失败不影响主流程
+                pass
 
         # Build error context from last execution failure
         error_context = ""

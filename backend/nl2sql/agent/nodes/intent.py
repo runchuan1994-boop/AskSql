@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 from nl2sql.llm import Message, MessageRole
 from nl2sql.llm.factory import create_llm_client
-from nl2sql.schema import SchemaMatcher
 
 from ..state import IntentResult
+from ._schema_context import build_compact_schema_context
 from ._step_utils import step_start, step_complete, step_error
 
 if TYPE_CHECKING:
@@ -94,35 +94,6 @@ def _parse_json_response(text: str) -> dict | None:
         return None
 
 
-def _build_schema_context(state: dict) -> str:
-    """Build a compact schema context from top matching tables."""
-    matcher = SchemaMatcher(state["datasources"])
-    matches = matcher.match_tables(state["user_query"], top_k=10)
-
-    if not matches:
-        return "（无匹配的表）"
-
-    lines = []
-    current_ds = None
-    for m in matches:
-        if m.datasource_id != current_ds:
-            ds = next(
-                (d for d in state["datasources"] if d.datasource_id == m.datasource_id),
-                None,
-            )
-            if ds:
-                lines.append(f"数据源: {ds.datasource_name} ({ds.datasource_id})")
-                current_ds = m.datasource_id
-
-        tbl = m.table
-        lines.append(f"  表: {tbl.name} - {tbl.description} (score: {m.score:.1f})")
-        # Show column names only (compact)
-        col_names = [col.name for col in tbl.columns]
-        lines.append(f"    列: {', '.join(col_names)}")
-
-    return "\n".join(lines)
-
-
 def _send_event(state: dict, event_type: str, data: dict | None = None) -> None:
     """Send an event via callback if set."""
     callback = getattr(state, "event_callback", None)
@@ -146,7 +117,7 @@ def intent_analyze_node(state: dict) -> dict:
     t0 = step_start(state, "intent_analysis", "意图分析")
 
     try:
-        schema_context = _build_schema_context(state)
+        schema_context = build_compact_schema_context(state)
         user_query = state["user_query"]
 
         user_msg = f"""用户查询：{user_query}
