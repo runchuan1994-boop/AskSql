@@ -20,6 +20,16 @@ class Column(BaseModel):
     enum_values: list[str] = []
     semantic_type: Optional[str] = None  # timestamp / amount / dimension / category / id
 
+    # ---- 增肥字段 ----
+    business_name: str = ""          # 业务名称（YAML 配置）
+    distinct_count: int | None = None  # 去重值数量（自动探测）
+    top_values: list[dict] = []      # 高频值及占比 [{value, count, ratio}]
+    value_min: str | None = None     # 最小值（数值/时间/字符串通用，存字符串方便序列化）
+    value_max: str | None = None     # 最大值
+    null_count: int | None = None    # NULL 行数
+    null_rate: float | None = None   # NULL 率（0.0 ~ 1.0）
+    calc_formula: str = ""           # 计算口径说明（衍生字段，YAML 配置）
+
 
 class Table(BaseModel):
     """表定义。"""
@@ -28,6 +38,15 @@ class Table(BaseModel):
     description: str = ""
     columns: list[Column] = []
     examples: list[dict] = []
+
+    # ---- 增肥字段 ----
+    aliases: list[str] = []          # 业务别名列表（YAML 配置）
+    business_domain: str = ""        # 所属业务域（YAML 配置）
+    row_count: int | None = None     # 数据行数（自动探测）
+    common_dimensions: list[str] = []  # 常用维度列名（YAML + 推断）
+    common_metrics: list[dict] = []    # 常用指标 [{name, expression}]（YAML + 推断）
+    sample_rows: list[dict] = []     # 样例数据（前 N 行，列名→值）
+    update_frequency: str = ""       # 更新频率描述（YAML 配置）
 
     @property
     def column_names(self) -> list[str]:
@@ -41,11 +60,21 @@ class Table(BaseModel):
                 return col
         return None
 
+    def has_profiling_data(self) -> bool:
+        """是否包含自动探测的数据。"""
+        return self.row_count is not None or any(
+            col.null_rate is not None or col.value_min is not None
+            for col in self.columns
+        )
+
 
 class Schema(BaseModel):
     """Schema 定义：包含多张表。"""
 
     tables: list[Table] = []
+    profiling_enabled: bool = True
+    sample_row_count: int = 5
+    max_rows_for_full_profiling: int = 1_000_000
 
     @property
     def table_names(self) -> list[str]:

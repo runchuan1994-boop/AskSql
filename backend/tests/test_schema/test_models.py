@@ -182,3 +182,120 @@ class TestDatasourceSchema:
         )
         assert ds.datasource_type == "mysql"
         assert ds.datasource_name == ""
+
+
+class TestColumnEnrichment:
+    def test_default_values(self):
+        col = Column(name="amount", type="decimal")
+        assert col.business_name == ""
+        assert col.distinct_count is None
+        assert col.top_values == []
+        assert col.value_min is None
+        assert col.value_max is None
+        assert col.null_count is None
+        assert col.null_rate is None
+        assert col.calc_formula == ""
+
+    def test_with_profiling_data(self):
+        col = Column(
+            name="status",
+            type="varchar",
+            business_name="订单状态",
+            distinct_count=5,
+            top_values=[
+                {"value": "paid", "count": 1000, "ratio": 0.6},
+                {"value": "shipped", "count": 400, "ratio": 0.24},
+            ],
+            null_count=10,
+            null_rate=0.006,
+        )
+        assert col.business_name == "订单状态"
+        assert col.distinct_count == 5
+        assert len(col.top_values) == 2
+        assert col.top_values[0]["ratio"] == 0.6
+        assert col.null_rate == 0.006
+
+    def test_numeric_range(self):
+        col = Column(
+            name="total_amount",
+            type="decimal(10,2)",
+            value_min="0.01",
+            value_max="99999.99",
+        )
+        assert col.value_min == "0.01"
+        assert col.value_max == "99999.99"
+
+    def test_calc_formula(self):
+        col = Column(
+            name="final_amount",
+            type="decimal",
+            calc_formula="total_amount + shipping_fee - discount",
+        )
+        assert "total_amount" in col.calc_formula
+
+
+class TestTableEnrichment:
+    def test_default_values(self):
+        table = Table(name="orders")
+        assert table.aliases == []
+        assert table.business_domain == ""
+        assert table.row_count is None
+        assert table.common_dimensions == []
+        assert table.common_metrics == []
+        assert table.sample_rows == []
+        assert table.update_frequency == ""
+        assert not table.has_profiling_data()
+
+    def test_with_aliases_and_domain(self):
+        table = Table(
+            name="orders",
+            aliases=["交易表", "下单表"],
+            business_domain="交易域",
+            update_frequency="实时",
+        )
+        assert "交易表" in table.aliases
+        assert table.business_domain == "交易域"
+
+    def test_with_common_metrics(self):
+        table = Table(
+            name="orders",
+            common_dimensions=["user_id", "channel", "created_at"],
+            common_metrics=[
+                {"name": "GMV", "expression": "SUM(total_amount)"},
+                {"name": "订单量", "expression": "COUNT(*)"},
+            ],
+        )
+        assert len(table.common_dimensions) == 3
+        assert table.common_metrics[0]["name"] == "GMV"
+
+    def test_with_sample_rows_and_profiling(self):
+        table = Table(
+            name="orders",
+            row_count=523400,
+            sample_rows=[
+                {"order_id": 10001, "total_amount": 299.00},
+                {"order_id": 10002, "total_amount": 599.00},
+            ],
+        )
+        assert table.row_count == 523400
+        assert len(table.sample_rows) == 2
+        assert table.has_profiling_data()
+
+
+class TestSchemaProfilingConfig:
+    def test_default_values(self):
+        schema = Schema(tables=[])
+        assert schema.profiling_enabled is True
+        assert schema.sample_row_count == 5
+        assert schema.max_rows_for_full_profiling == 1_000_000
+
+    def test_custom_values(self):
+        schema = Schema(
+            tables=[],
+            profiling_enabled=False,
+            sample_row_count=3,
+            max_rows_for_full_profiling=500_000,
+        )
+        assert schema.profiling_enabled is False
+        assert schema.sample_row_count == 3
+        assert schema.max_rows_for_full_profiling == 500_000

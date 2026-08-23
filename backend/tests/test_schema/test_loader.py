@@ -105,6 +105,136 @@ tables:
         with pytest.raises(FileNotFoundError):
             loader.load_from_yaml("/nonexistent/path/schema.yaml")
 
+    def test_enriched_yaml_fields(self):
+        yaml_content = """
+datasource:
+  id: test_db
+  name: test
+  type: mysql
+profiling:
+  enabled: true
+  sample_row_count: 3
+  max_rows_for_full_profiling: 500000
+tables:
+  - name: orders
+    description: 订单表
+    aliases: [交易表, 下单表]
+    business_domain: 交易域
+    update_frequency: 实时
+    row_count: 523400
+    common_dimensions: [user_id, channel, created_at]
+    common_metrics:
+      - name: GMV
+        expression: SUM(total_amount)
+    sample_rows:
+      - order_id: 10001
+        total_amount: 299.00
+    columns:
+      - name: order_id
+        type: bigint
+        is_primary_key: true
+        business_name: 订单编号
+      - name: total_amount
+        type: decimal(10,2)
+        description: 订单总金额
+        business_name: 商品原价
+        semantic_type: amount
+        value_min: "0.01"
+        value_max: "99999.99"
+        null_rate: 0.005
+      - name: status
+        type: varchar
+        semantic_type: category
+        distinct_count: 5
+        top_values:
+          - value: paid
+            count: 1000
+            ratio: 0.6
+"""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(yaml_content)
+            tmp_path = f.name
+
+        try:
+            loader = SchemaLoader()
+            ds = loader.load_from_yaml(tmp_path)
+            orders = ds.db_schema.get_table("orders")
+
+            assert orders is not None
+            assert orders.aliases == ["交易表", "下单表"]
+            assert orders.business_domain == "交易域"
+            assert orders.update_frequency == "实时"
+            assert orders.row_count == 523400
+            assert orders.common_dimensions == ["user_id", "channel", "created_at"]
+            assert len(orders.common_metrics) == 1
+            assert orders.common_metrics[0]["name"] == "GMV"
+            assert len(orders.sample_rows) == 1
+            assert orders.sample_rows[0]["order_id"] == 10001
+
+            # profiling 配置
+            assert ds.db_schema.profiling_enabled is True
+            assert ds.db_schema.sample_row_count == 3
+            assert ds.db_schema.max_rows_for_full_profiling == 500000
+
+            order_id_col = orders.get_column("order_id")
+            assert order_id_col.business_name == "订单编号"
+
+            amount_col = orders.get_column("total_amount")
+            assert amount_col.business_name == "商品原价"
+            assert amount_col.value_min == "0.01"
+            assert amount_col.value_max == "99999.99"
+            assert amount_col.null_rate == 0.005
+
+            status_col = orders.get_column("status")
+            assert status_col.distinct_count == 5
+            assert len(status_col.top_values) == 1
+            assert status_col.top_values[0]["value"] == "paid"
+            assert status_col.top_values[0]["ratio"] == 0.6
+        finally:
+            os.unlink(tmp_path)
+
+    def test_backward_compatible_old_yaml(self):
+        """旧 YAML 文件（没有新增字段）也能正常加载。"""
+        yaml_content = """
+datasource:
+  id: old_db
+tables:
+  - name: items
+    description: old table
+    columns:
+      - name: id
+        type: int
+        is_primary_key: true
+"""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as f:
+            f.write(yaml_content)
+            tmp_path = f.name
+
+        try:
+            loader = SchemaLoader()
+            ds = loader.load_from_yaml(tmp_path)
+            items = ds.db_schema.get_table("items")
+
+            # 新增字段都是默认值
+            assert items.aliases == []
+            assert items.business_domain == ""
+            assert items.row_count is None
+            assert items.sample_rows == []
+            assert items.common_metrics == []
+            assert ds.db_schema.profiling_enabled is True  # 默认开启
+
+            id_col = items.get_column("id")
+            assert id_col.business_name == ""
+            assert id_col.distinct_count is None
+            assert id_col.top_values == []
+            assert id_col.null_rate is None
+        finally:
+            os.unlink(tmp_path)
+
 
 class TestSchemaLoaderLoadFromDirectory:
     def test_load_sample_directory(self):

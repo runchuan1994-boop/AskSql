@@ -47,19 +47,32 @@ class SchemaLoader:
 
         tables = [self._parse_table(t) for t in tables_data]
 
+        # profiling 配置（schema 级别）
+        profiling = data.get("profiling", {})
+
+        schema_kwargs: dict[str, Any] = {"tables": tables}
+        if isinstance(profiling, dict):
+            if "enabled" in profiling:
+                schema_kwargs["profiling_enabled"] = profiling["enabled"]
+            if "sample_row_count" in profiling:
+                schema_kwargs["sample_row_count"] = profiling["sample_row_count"]
+            if "max_rows_for_full_profiling" in profiling:
+                schema_kwargs["max_rows_for_full_profiling"] = profiling["max_rows_for_full_profiling"]
+
         return DatasourceSchema(
             datasource_id=ds_info.get("id", ""),
             datasource_name=ds_info.get("name", ""),
             datasource_type=ds_info.get("type", "mysql"),
-            db_schema=Schema(tables=tables),
+            db_schema=Schema(**schema_kwargs),
         )
 
     def _parse_table(self, table_data: dict[str, Any]) -> Table:
         columns_data = table_data.get("columns", [])
         columns = [Column(**col) for col in columns_data]
-        return Table(
-            name=table_data.get("name", ""),
-            description=table_data.get("description", ""),
-            columns=columns,
-            examples=table_data.get("examples", []),
-        )
+
+        # 透传所有 Table 模型支持的字段
+        valid_fields = set(Table.model_fields.keys())
+        table_kwargs = {k: v for k, v in table_data.items() if k in valid_fields}
+        table_kwargs["columns"] = columns
+
+        return Table(**table_kwargs)
