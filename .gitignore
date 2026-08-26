@@ -20,6 +20,7 @@ data/
 # Claude / Superpowers local config
 .claude/
 .superpowers/
+.worktrees/
 
 # OS
 .DS_Store
