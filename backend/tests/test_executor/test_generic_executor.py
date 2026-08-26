@@ -171,7 +171,8 @@ class TestGenericSQLExecutor:
 
 
 class TestExecutorFactory:
-    def test_create_executor_returns_generic(self):
+    def test_create_executor_returns_generic(self, monkeypatch):
+        monkeypatch.setenv("SANDBOX_ENABLED", "false")
         exec_ = create_executor(
             datasource_id="ds1",
             datasource_type="mysql",
@@ -182,7 +183,8 @@ class TestExecutorFactory:
         assert isinstance(exec_, GenericSQLExecutor)
         assert exec_.datasource_id == "ds1"
 
-    def test_create_executor_all_types_use_generic(self):
+    def test_create_executor_all_types_use_generic(self, monkeypatch):
+        monkeypatch.setenv("SANDBOX_ENABLED", "false")
         for ds_type in ["postgres", "mysql", "sqlite", "bigquery"]:
             exec_ = create_executor(
                 datasource_id=f"ds_{ds_type}",

@@ -13,7 +13,15 @@ import {
   Cell,
 } from 'recharts'
 import type { ChartSpec } from '../../lib/types'
-import { rowsToObjects, resolveXField, resolveYFields, getChartColor } from './chartUtils'
+import {
+  rowsToObjects,
+  resolveXField,
+  resolveYFields,
+  getChartColor,
+  formatDateTick,
+  formatNumberTick,
+  smartFormatTick,
+} from './chartUtils'
 
 interface BarChartViewProps {
   chart: ChartSpec
@@ -27,8 +35,35 @@ export function BarChartView({ chart, columns, rows }: BarChartViewProps) {
   const yFields = resolveYFields(chart, columns)
   const stacked = chart.stacked ?? false
 
+  // X 轴 tick 格式化
+  const formatX = (value: unknown) => {
+    if (chart.x_format === 'date' || chart.x_format === 'month' || chart.x_format === 'datetime') {
+      return formatDateTick(value)
+    }
+    if (chart.x_format === 'number') {
+      return formatNumberTick(value)
+    }
+    return smartFormatTick(value)
+  }
+
+  // Y 轴 tick 格式化
+  const formatY = (value: unknown) => {
+    if (chart.y_format === 'percent') {
+      return `${formatNumberTick(value)}%`
+    }
+    if (chart.y_format === 'currency' || chart.y_format === 'money') {
+      return `¥${formatNumberTick(value)}`
+    }
+    return formatNumberTick(value)
+  }
+
   if (!xField || yFields.length === 0) {
-    return null
+    return (
+      <div className="w-full h-64 flex flex-col items-center justify-center text-gray-400 text-xs gap-1">
+        <span>无法自动匹配图表字段</span>
+        <span className="text-gray-300">列: {columns.join(', ')}</span>
+      </div>
+    )
   }
 
   const isMultiSeries = yFields.length > 1
@@ -47,12 +82,15 @@ export function BarChartView({ chart, columns, rows }: BarChartViewProps) {
             angle={shouldRotate ? -30 : 0}
             textAnchor={shouldRotate ? 'end' : 'middle'}
             height={shouldRotate ? 60 : 30}
+            interval={0}
+            tickFormatter={formatX}
           />
           <YAxis
             tick={{ fontSize: 11, fill: '#94a3b8' }}
             tickLine={false}
             axisLine={false}
-            width={48}
+            width={56}
+            tickFormatter={formatY}
           />
           <Tooltip
             contentStyle={{

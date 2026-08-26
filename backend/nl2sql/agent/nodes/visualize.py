@@ -60,10 +60,21 @@ VISUALIZE_SYSTEM_PROMPT = """你是一位数据可视化专家。根据用户的
 - title: 图表标题
 
 根据类型选填：
-- line/bar/area: x_field, y_field（或 y_fields 多系列）, stacked
+- line/bar/area: x_field, y_field（或 y_fields 多系列）, stacked, x_format, y_format
 - pie: category_field, value_field
 - metric: value_field（可选 title 中说明含义）
 - table: （不需要额外字段）
+
+**字段格式化（x_format / y_format）**：
+根据数据类型选择合适的格式，让坐标轴和 tooltip 更易读：
+- x_format: "date"（日期，如 2024-01-15）/ "month"（月份，如 2024-01）/ "datetime"（日期时间）/ "number"（数值）
+  - 当 X 轴是日期且数据按月聚合（每月第一天）→ x_format: "month"
+  - 当 X 轴是日期且按天聚合 → x_format: "date"
+  - 当 X 轴是日期且包含具体时间 → x_format: "datetime"
+- y_format: "number"（千分位数值）/ "percent"（百分比）/ "currency"（货币）/ "short"（简短）
+  - 金额、销售额、价格 → y_format: "currency"
+  - 占比、比率、增长率 → y_format: "percent"
+  - 普通数值、数量 → y_format: "number"
 """
 
 
@@ -71,9 +82,15 @@ VISUALIZE_SYSTEM_PROMPT = """你是一位数据可视化专家。根据用户的
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _send_event(state: dict, event_type: str, data: dict | None = None) -> None:
-    """Send an event via callback if set."""
-    callback = getattr(state, "event_callback", None)
+def _send_event(state: dict | Any, event_type: str, data: dict | None = None) -> None:
+    """Send an event via callback if set.
+
+    Compatible with both dict state (LangGraph runtime) and Pydantic model state (tests).
+    """
+    if isinstance(state, dict):
+        callback = state.get("event_callback")
+    else:
+        callback = getattr(state, "event_callback", None)
     if callback is not None:
         try:
             callback(event_type, data or {})

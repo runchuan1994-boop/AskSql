@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
 import traceback
 from typing import AsyncGenerator
@@ -23,6 +24,11 @@ from app.services.result_cache import result_cache
 _event_queues: dict[str, asyncio.Queue] = {}
 _active_tasks: dict[str, asyncio.Task] = {}
 
+# 待确认记忆队列：session_id -> [memory1, memory2, ...]
+# （上一轮检测到的纠错记忆，本轮 summarize 时确认）
+_pending_confirmations: dict[str, list[dict]] = {}
+_pending_lock = threading.Lock()  # type: ignore  # threading 下面导入
+
 
 def _get_event_queue(session_id: str) -> asyncio.Queue:
     """获取或创建指定会话的事件队列."""
@@ -38,6 +44,192 @@ def _send_event_sync(session_id: str, event_type: str, data: dict) -> None:
         queue.put_nowait((event_type, data))
     except asyncio.QueueFull:
         pass
+
+
+# ---------------------------------------------------------------------------
+# 待确认记忆队列
+# ---------------------------------------------------------------------------
+
+def add_pending_confirmation(session_id: str, memory: dict) -> None:
+    """添加一条待确认的记忆（下一轮对话中确认）。"""
+    with _pending_lock:
+        if session_id not in _pending_confirmations:
+            _pending_confirmations[session_id] = []
+        _pending_confirmations[session_id].append(memory)
+
+
+def get_pending_confirmations(session_id: str) -> list[dict]:
+    """获取并清空待确认的记忆列表。"""
+    with _pending_lock:
+        mems = _pending_confirmations.pop(session_id, [])
+        return mems
+
+
+def peek_pending_confirmations(session_id: str) -> list[dict]:
+    """查看待确认记忆（不清空）。"""
+    with _pending_lock:
+        return list(_pending_confirmations.get(session_id, []))
+
+
+# ---------------------------------------------------------------------------
+# 记忆确认（提升 confidence）
+# ---------------------------------------------------------------------------
+
+def confirm_pending_memories(session_id: str, memory_ids: list[str]) -> None:
+    """将待确认记忆的 confidence 从 0.8 提升到 0.9，并标记为已确认。
+
+    - 只更新 source 以 'user_correction' 开头的记忆
+    - confidence 只升不降（已经 >= 0.9 的不修改）
+    - 更新失败不抛异常，log warning 即可
+    """
+    import logging
+
+    from app.services.memory_service import get_memory, update_memory
+
+    logger = logging.getLogger(__name__)
+
+    if not memory_ids:
+        return
+
+    for mem_id in memory_ids:
+        try:
+            mem = get_memory(mem_id)
+            if not mem:
+                logger.warning("Memory %s not found, skipping confirmation", mem_id)
+                continue
+
+            # 只处理 user_correction 来源的记忆
+            source = mem.get("source", "") or ""
+            if not source.startswith("user_correction"):
+                continue
+
+            # confidence 只升不降
+            current_conf = mem.get("confidence", 0) or 0
+            if current_conf >= 0.9:
+                continue
+
+            update_memory(mem_id, {
+                "confidence": 0.9,
+                "source": "user_correction_confirmed",
+            })
+        except Exception as e:
+            logger.warning("Failed to confirm memory %s: %s", mem_id, e)
+
+
+# ---------------------------------------------------------------------------
+# 异步纠错检测
+# ---------------------------------------------------------------------------
+
+def _start_async_correction_detection(
+    session_id: str,
+    user_query: str,
+    project_id: str,
+    user_msg_id: str,
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    """启动异步纠错检测（后台线程，不阻塞主流程）。"""
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    def _detect():
+        try:
+            from app.services.correction_detector import (
+                detect_correction,
+                validate_memory_against_schema,
+            )
+            from app.services.memory_service import upsert_correction_memory
+            from app.services.session_service import get_messages
+            from nl2sql.schema.loader import SchemaLoader
+
+            # 获取上下文消息
+            messages = get_messages(session_id)
+            context = [
+                {"role": m.get("role", ""), "content": m.get("content", "")}
+                for m in messages[-10:]  # 最近 10 条
+            ]
+
+            # 检测
+            correction = detect_correction(user_query, context=context)
+            if not correction.is_correction:
+                return
+
+            # 获取项目的数据源和 schema，用于验证
+            conn = get_connection()
+            try:
+                cursor = conn.execute(
+                    "SELECT id, schema_file FROM datasources WHERE project_id = ?",
+                    (project_id,),
+                )
+                ds_rows = cursor.fetchall()
+            finally:
+                conn.close()
+
+            # 收集所有表用于验证
+            all_tables = []
+            datasource_id_for_memory = None
+            loader = SchemaLoader()
+            for ds_row in ds_rows:
+                schema_file = ds_row["schema_file"]
+                if not schema_file:
+                    continue
+                try:
+                    ds = loader.load_from_yaml(schema_file)
+                    all_tables.extend(ds.db_schema.tables)
+                    if datasource_id_for_memory is None:
+                        datasource_id_for_memory = ds_row["id"]
+                except Exception:
+                    continue
+
+            if not all_tables:
+                return
+
+            # 验证
+            correction = validate_memory_against_schema(correction, all_tables)
+            if not correction.is_correction:
+                return
+
+            if not datasource_id_for_memory:
+                return
+
+            # 存储记忆（已有同实体纠错则覆盖，手动添加的不覆盖）
+            memory = upsert_correction_memory(
+                datasource_id=datasource_id_for_memory,
+                memory_type=correction.memory_type,
+                entity_type=correction.entity_type,
+                entity_name=correction.entity_name,
+                content=correction.content,
+                raw_content=correction.raw_content,
+                source_session_id=session_id,
+                source_message_id=user_msg_id,
+            )
+
+            # 加入待确认队列
+            add_pending_confirmation(session_id, memory)
+
+            # 发送 SSE 事件通知前端
+            try:
+                loop.call_soon_threadsafe(
+                    _send_event_sync, session_id, "memory_saved",
+                    {
+                        "memory_id": memory["id"],
+                        "content": memory["content"],
+                        "entity_name": memory.get("entity_name"),
+                        "memory_type": memory.get("memory_type"),
+                    },
+                )
+            except Exception:
+                pass
+
+        except Exception as e:
+            logger.warning("Async correction detection failed: %s", e)
+
+    t = threading.Thread(
+        target=_detect,
+        daemon=True,
+        name=f"correction-detect-{session_id}",
+    )
+    t.start()
 
 
 def _build_dispatcher_sync(project_id: str, session_id: str, loop: asyncio.AbstractEventLoop):
@@ -164,7 +356,17 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
     session_service.update_session_title_from_query(session_id, user_query)
 
     # 保存用户消息
-    session_service.add_message(session_id, "user", user_query)
+    msg_result = session_service.add_message(session_id, "user", user_query)
+    user_msg_id = msg_result.get("id", "") if isinstance(msg_result, dict) else ""
+
+    # 启动异步纠错检测（不阻塞主流程）
+    _start_async_correction_detection(
+        session_id=session_id,
+        user_query=user_query,
+        project_id=project_id,
+        user_msg_id=user_msg_id,
+        loop=loop,
+    )
 
     # 构建 dispatcher（统一入口，自动路由到对应子 Agent）
     dispatcher = _build_dispatcher_sync(project_id, session_id, loop)
@@ -172,11 +374,43 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
     # 加载历史消息
     history = _load_history_messages_sync(session_id)
 
+    # 构建记忆召回回调（从所有数据源召回）
+    def memory_retriever(query: str, related_tables: list[str]) -> list[dict]:
+        from app.services.memory_service import get_memories_for_query
+        all_memories = []
+        conn = get_connection()
+        try:
+            cursor = conn.execute(
+                "SELECT id FROM datasources WHERE project_id = ?",
+                (project_id,),
+            )
+            ds_ids = [row["id"] for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+        for ds_id in ds_ids:
+            try:
+                mems = get_memories_for_query(
+                    ds_id, query, related_tables=related_tables
+                )
+                all_memories.extend(mems)
+            except Exception:
+                pass
+        return all_memories
+
+    # 待确认记忆（上一轮检测到的，本轮在 summarize 中确认）
+    pending_mems = get_pending_confirmations(session_id)
+
+    extra_state = {
+        "memory_retriever": memory_retriever,
+        "pending_memories": pending_mems,
+    }
+
     start_time = time.perf_counter()
 
     try:
         # 运行 dispatcher（同步，已经在线程里了）
-        result = dispatcher.run(user_query, history, datasource_id)
+        result = dispatcher.run(user_query, history, datasource_id, extra_state)
 
         execution_time_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -311,6 +545,11 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
             },
         )
 
+        # 确认本轮展示的待确认记忆（提升 confidence）
+        if pending_mems:
+            pending_ids = [m["id"] for m in pending_mems if m.get("id")]
+            confirm_pending_memories(session_id, pending_ids)
+
     except Exception as e:
         execution_time_ms = int((time.perf_counter() - start_time) * 1000)
         error_msg = str(e)
@@ -357,6 +596,14 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
             _send_event_sync, session_id, "chat_done",
             {"status": "failed", "error": error_msg},
         )
+
+        # 确认本轮展示的待确认记忆（即使出错也确认，因为 summarize 节点已显示确认文本）
+        try:
+            if pending_mems:
+                pending_ids = [m["id"] for m in pending_mems if m.get("id")]
+                confirm_pending_memories(session_id, pending_ids)
+        except Exception:
+            pass
 
 
 async def start_chat(session_id: str, user_query: str, datasource_id: str | None = None) -> str:

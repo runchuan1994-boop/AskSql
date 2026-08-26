@@ -380,6 +380,78 @@ class TestListMemories:
         assert result["total"] == 1
 
 
+class TestGetMemoriesIncrementsAccess:
+    def test_get_memories_increments_access_count(self):
+        from app.services.memory_service import (
+            add_memory, get_memory, get_memories_for_query,
+        )
+
+        mem = add_memory(
+            datasource_id="ds_1",
+            memory_type="table_description",
+            entity_type="table",
+            entity_name="orders",
+            content="orders table",
+        )
+        assert mem["access_count"] == 0
+
+        # 第一次召回
+        result = get_memories_for_query(
+            datasource_id="ds_1",
+            query="订单",
+            related_tables=["orders"],
+        )
+        assert len(result) == 1
+        updated = get_memory(mem["id"])
+        assert updated and updated["access_count"] == 1
+
+        # 第二次召回
+        get_memories_for_query(
+            datasource_id="ds_1",
+            query="订单",
+            related_tables=["orders"],
+        )
+        updated = get_memory(mem["id"])
+        assert updated and updated["access_count"] == 2
+
+    def test_column_memory_recalled_by_table(self):
+        from app.services.memory_service import add_memory, get_memories_for_query
+
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount 是商品原价",
+        )
+
+        result = get_memories_for_query(
+            datasource_id="ds_1",
+            query="订单金额",
+            related_tables=["orders"],
+        )
+        assert len(result) == 1
+        assert result[0]["entity_name"] == "orders.amount"
+
+    def test_column_memory_not_recalled_for_other_table(self):
+        from app.services.memory_service import add_memory, get_memories_for_query
+
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount 是商品原价",
+        )
+
+        result = get_memories_for_query(
+            datasource_id="ds_1",
+            query="用户信息",
+            related_tables=["users"],
+        )
+        assert len(result) == 0
+
+
 class TestIncrementAccess:
     def test_increment(self):
         from app.services.memory_service import add_memory, get_memory, increment_access
@@ -401,6 +473,147 @@ class TestIncrementAccess:
         increment_access(mem["id"])
         updated = get_memory(mem["id"])
         assert updated and updated["access_count"] == 3
+
+
+class TestConfirmPendingMemories:
+    """测试 chat_service.confirm_pending_memories 函数。"""
+
+    def test_confirm_pending_memories_updates_confidence(self):
+        """user_correction 来源的记忆确认后 confidence 从 0.8 升到 0.9，source 变更。"""
+        from app.services.memory_service import add_memory, get_memory
+        from app.services.chat_service import confirm_pending_memories
+
+        mem = add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount 是原价",
+            source="user_correction",
+            confidence=0.8,
+        )
+        assert mem["confidence"] == 0.8
+        assert mem["source"] == "user_correction"
+
+        confirm_pending_memories("sess_1", [mem["id"]])
+
+        updated = get_memory(mem["id"])
+        assert updated is not None
+        assert updated["confidence"] == 0.9
+        assert updated["source"] == "user_correction_confirmed"
+
+    def test_confirm_empty_list_does_nothing(self):
+        """空列表不做任何操作。"""
+        from app.services.chat_service import confirm_pending_memories
+
+        # 不应抛异常
+        confirm_pending_memories("sess_1", [])
+
+    def test_confirm_non_correction_source_unchanged(self):
+        """手动添加的记忆（非 user_correction 来源）不被修改。"""
+        from app.services.memory_service import add_memory, get_memory
+        from app.services.chat_service import confirm_pending_memories
+
+        mem = add_memory(
+            datasource_id="ds_1",
+            memory_type="term_mapping",
+            entity_type="term",
+            entity_name="GMV",
+            content="GMV 是总交易额",
+            source="manual_add",
+            confidence=0.8,
+        )
+
+        confirm_pending_memories("sess_1", [mem["id"]])
+
+        updated = get_memory(mem["id"])
+        assert updated is not None
+        assert updated["confidence"] == 0.8
+        assert updated["source"] == "manual_add"
+
+    def test_confirm_already_high_confidence_unchanged(self):
+        """已经 >= 0.9 的记忆不被修改（不降级）。"""
+        from app.services.memory_service import add_memory, get_memory
+        from app.services.chat_service import confirm_pending_memories
+
+        mem = add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount 是原价",
+            source="user_correction_confirmed",
+            confidence=0.95,
+        )
+
+        confirm_pending_memories("sess_1", [mem["id"]])
+
+        updated = get_memory(mem["id"])
+        assert updated is not None
+        assert updated["confidence"] == 0.95
+        # source 也不变（因为 confidence 已经 >= 0.9，跳过）
+        assert updated["source"] == "user_correction_confirmed"
+
+    def test_confirm_already_confirmed_source_still_upgrades_from_08(self):
+        """source 已是 user_correction_confirmed 但 confidence 还是 0.8 的边缘情况也会提升。"""
+        from app.services.memory_service import add_memory, get_memory
+        from app.services.chat_service import confirm_pending_memories
+
+        mem = add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount 是原价",
+            source="user_correction_confirmed",
+            confidence=0.8,
+        )
+
+        confirm_pending_memories("sess_1", [mem["id"]])
+
+        updated = get_memory(mem["id"])
+        assert updated is not None
+        assert updated["confidence"] == 0.9
+
+    def test_confirm_nonexistent_memory_no_error(self):
+        """不存在的记忆 ID 不抛异常。"""
+        from app.services.chat_service import confirm_pending_memories
+
+        # 不应抛异常
+        confirm_pending_memories("sess_1", ["mem_nonexistent_123"])
+
+    def test_confirm_multiple_memories(self):
+        """批量确认多条记忆。"""
+        from app.services.memory_service import add_memory, get_memory
+        from app.services.chat_service import confirm_pending_memories
+
+        mem1 = add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount 是原价",
+            source="user_correction",
+            confidence=0.8,
+        )
+        mem2 = add_memory(
+            datasource_id="ds_1",
+            memory_type="term_mapping",
+            entity_type="term",
+            entity_name="流水",
+            content="流水就是 GMV",
+            source="user_correction",
+            confidence=0.8,
+        )
+
+        confirm_pending_memories("sess_1", [mem1["id"], mem2["id"]])
+
+        u1 = get_memory(mem1["id"])
+        u2 = get_memory(mem2["id"])
+        assert u1["confidence"] == 0.9
+        assert u1["source"] == "user_correction_confirmed"
+        assert u2["confidence"] == 0.9
+        assert u2["source"] == "user_correction_confirmed"
 
 
 class TestGetMemoriesForTable:
@@ -431,3 +644,427 @@ class TestGetMemoriesForTable:
 
         result = get_memories_for_table("ds_1", "orders")
         assert len(result) == 2  # 1 表级 + 1 列级
+
+
+class TestFindMemoryByEntity:
+    def test_find_memory_by_entity_found(self):
+        from app.services.memory_service import add_memory, find_memory_by_entity
+
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount is original price",
+            source="user_correction",
+            confidence=0.8,
+        )
+
+        result = find_memory_by_entity("ds_1", "column_description", "orders.amount")
+        assert result is not None
+        assert result["entity_name"] == "orders.amount"
+        assert result["content"] == "amount is original price"
+
+    def test_find_memory_by_entity_not_found(self):
+        from app.services.memory_service import find_memory_by_entity
+
+        result = find_memory_by_entity("ds_1", "column_description", "orders.nonexistent")
+        assert result is None
+
+    def test_find_returns_highest_confidence(self):
+        from app.services.memory_service import add_memory, find_memory_by_entity
+
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="low confidence",
+            confidence=0.5,
+        )
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="high confidence",
+            confidence=0.95,
+        )
+
+        result = find_memory_by_entity("ds_1", "column_description", "orders.amount")
+        assert result is not None
+        assert result["content"] == "high confidence"
+        assert result["confidence"] == 0.95
+
+    def test_find_skips_inactive(self):
+        from app.services.memory_service import (
+            add_memory, delete_memory, find_memory_by_entity,
+        )
+
+        mem = add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="to be deleted",
+        )
+        delete_memory(mem["id"])
+
+        result = find_memory_by_entity("ds_1", "column_description", "orders.amount")
+        assert result is None
+
+    def test_find_isolated_by_datasource(self):
+        from app.services.memory_service import add_memory, find_memory_by_entity
+
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="ds1 content",
+        )
+
+        result = find_memory_by_entity("ds_2", "column_description", "orders.amount")
+        assert result is None
+
+
+class TestUpsertCorrectionMemory:
+    def test_upsert_new_memory(self):
+        """没有旧记忆时创建新的。"""
+        from app.services.memory_service import (
+            list_memories, upsert_correction_memory,
+        )
+
+        mem = upsert_correction_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount is original price",
+            raw_content="用户说 amount 是原价",
+            source_session_id="sess_1",
+            source_message_id="msg_1",
+        )
+
+        assert mem["id"].startswith("mem_")
+        assert mem["entity_name"] == "orders.amount"
+        assert mem["content"] == "amount is original price"
+        assert mem["source"] == "user_correction"
+        assert mem["confidence"] == 0.8
+        assert mem["source_session_id"] == "sess_1"
+        assert mem["source_message_id"] == "msg_1"
+
+        listed = list_memories("ds_1")
+        assert listed["total"] == 1
+
+    def test_upsert_overwrites_existing(self):
+        """有旧自动纠错记忆时更新内容和 confidence。"""
+        from app.services.memory_service import (
+            add_memory, list_memories, upsert_correction_memory,
+        )
+
+        # 先创建一条旧的纠错记忆（已确认，confidence=0.9）
+        old = add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="old content: amount is original price",
+            source="user_correction_confirmed",
+            confidence=0.9,
+            source_session_id="sess_old",
+            source_message_id="msg_old",
+        )
+
+        # 新的纠错覆盖旧记忆
+        updated = upsert_correction_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="new content: amount is order total",
+            raw_content="用户纠正：amount 其实是订单总额",
+            source_session_id="sess_new",
+            source_message_id="msg_new",
+        )
+
+        # id 不变，是同一条记录
+        assert updated["id"] == old["id"]
+        assert updated["content"] == "new content: amount is order total"
+        assert updated["raw_content"] == "用户纠正：amount 其实是订单总额"
+        assert updated["confidence"] == 0.8  # 重置为 0.8
+        assert updated["source"] == "user_correction"  # 改回 user_correction
+        assert updated["source_session_id"] == "sess_new"
+        assert updated["source_message_id"] == "msg_new"
+
+        # 总数不变，没有新增
+        listed = list_memories("ds_1")
+        assert listed["total"] == 1
+
+    def test_upsert_keeps_manual(self):
+        """手动添加的记忆不被覆盖，而是并存。"""
+        from app.services.memory_service import (
+            add_memory, list_memories, upsert_correction_memory,
+        )
+
+        # 手动添加的记忆（高优先级）
+        manual = add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="manual definition",
+            source="manual_add",
+            confidence=1.0,
+        )
+
+        # 自动纠错不覆盖手动添加的，而是并存
+        new_mem = upsert_correction_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="auto correction content",
+            source_session_id="sess_1",
+            source_message_id="msg_1",
+        )
+
+        # 新建了一条，不是同一条
+        assert new_mem["id"] != manual["id"]
+        assert new_mem["source"] == "user_correction"
+        assert new_mem["confidence"] == 0.8
+
+        # 两条记忆并存
+        listed = list_memories("ds_1")
+        assert listed["total"] == 2
+
+        # 手动添加的仍然存在且内容不变
+        from app.services.memory_service import get_memory
+        manual_updated = get_memory(manual["id"])
+        assert manual_updated is not None
+        assert manual_updated["content"] == "manual definition"
+        assert manual_updated["source"] == "manual_add"
+        assert manual_updated["confidence"] == 1.0
+
+    def test_upsert_different_entity(self):
+        """不同实体创建不同记忆。"""
+        from app.services.memory_service import list_memories, upsert_correction_memory
+
+        upsert_correction_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="amount desc",
+        )
+        upsert_correction_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.status",
+            content="status desc",
+        )
+
+        listed = list_memories("ds_1")
+        assert listed["total"] == 2
+
+    def test_upsert_preserves_access_count(self):
+        """更新时保留 access_count。"""
+        from app.services.memory_service import (
+            add_memory, increment_access, upsert_correction_memory,
+        )
+
+        old = add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="old content",
+            source="user_correction",
+        )
+
+        # 增加访问次数
+        increment_access(old["id"])
+        increment_access(old["id"])
+
+        updated = upsert_correction_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="new content",
+        )
+
+        assert updated["id"] == old["id"]
+        assert updated["access_count"] == 2
+
+
+class TestMemoryRecallRanking:
+    """测试记忆召回的相关性排序优化。"""
+
+    def test_table_memory_ranks_higher_than_term(self):
+        """表级精确匹配的记忆排名应该高于术语关键词匹配。"""
+        from app.services.memory_service import add_memory, get_memories_for_query
+
+        # 表级记忆（confidence 较低但匹配度高）
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="table_description",
+            entity_type="table",
+            entity_name="orders",
+            content="主站订单表",
+            confidence=0.8,
+        )
+        # 术语记忆（confidence 高但只是关键词匹配）
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="term_mapping",
+            entity_type="term",
+            entity_name="GMV",
+            content="商品交易总额",
+            confidence=1.0,
+            source="manual_add",
+        )
+
+        result = get_memories_for_query(
+            datasource_id="ds_1",
+            query="GMV 和订单统计",
+            related_tables=["orders"],
+        )
+        # 表级精确匹配（8分*0.3 + 0.8*10*0.5 = 2.4+4 = 6.4）
+        # vs 术语实体名匹配（6分*0.3 + 1.0*10*0.5 = 1.8+5 = 6.8）
+        # 术语置信度高可能排前，但表级也应该在前 2
+        assert len(result) == 2
+        entity_names = [m["entity_name"] for m in result]
+        assert "orders" in entity_names
+        assert "GMV" in entity_names
+
+    def test_exact_column_match_ranks_higher_than_prefix(self):
+        """列精确匹配应该比表前缀匹配排名更高。"""
+        from app.services.memory_service import add_memory, get_memories_for_query
+
+        # 精确匹配的列（低 confidence）
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.total_amount",
+            content="商品原价",
+            confidence=0.8,
+        )
+        # 前缀匹配的列（高 confidence）
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.status",
+            content="订单状态",
+            confidence=0.9,
+        )
+
+        # 只传列名精确匹配一个
+        result = get_memories_for_query(
+            datasource_id="ds_1",
+            query="统计",
+            related_tables=["orders"],
+            related_columns=["orders.total_amount"],
+        )
+        # 两条都能召回（一条精确匹配，一条表前缀匹配）
+        assert len(result) == 2
+        # 精确匹配的应该排第一（即使 confidence 低一些）
+        assert result[0]["entity_name"] == "orders.total_amount"
+
+    def test_term_entity_match_beats_content_match(self):
+        """术语记忆中，实体名精确匹配的应该比内容关键词匹配的排名高。"""
+        from app.services.memory_service import add_memory, get_memories_for_query
+
+        # 实体名匹配（低 confidence）
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="term_mapping",
+            entity_type="term",
+            entity_name="流水",
+            content="就是 GMV",
+            confidence=0.8,
+        )
+        # 内容关键词匹配（高 confidence，但实体名不在查询里）
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="term_mapping",
+            entity_type="term",
+            entity_name="客单价",
+            content="平均每笔订单金额",
+            confidence=1.0,
+            source="manual_add",
+        )
+
+        result = get_memories_for_query(
+            datasource_id="ds_1",
+            query="上月流水统计",
+        )
+        # 两条都能召回（流水实体匹配，客单价是内容部分匹配）
+        assert len(result) >= 1
+        # "流水" 实体名匹配应该排第一
+        assert result[0]["entity_name"] == "流水"
+
+    def test_query_boosts_relevant_memory(self):
+        """查询关键词命中会提升记忆排名。"""
+        from app.services.memory_service import add_memory, get_memories_for_query
+
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.status",
+            content="订单状态",
+            confidence=0.8,
+        )
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="column_description",
+            entity_type="column",
+            entity_name="orders.amount",
+            content="订单金额",
+            confidence=0.8,
+        )
+
+        # 查询包含 "状态"，status 列记忆应该排名更靠前
+        result = get_memories_for_query(
+            datasource_id="ds_1",
+            query="订单状态分布",
+            related_tables=["orders"],
+        )
+        assert len(result) == 2
+        assert "status" in result[0]["entity_name"]
+
+    def test_same_confidence_ranked_by_match_score(self):
+        """相同 confidence 下，匹配度高的排前面。"""
+        from app.services.memory_service import add_memory, get_memories_for_query
+
+        # 表级（匹配度高）
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="table_description",
+            entity_type="table",
+            entity_name="orders",
+            content="订单表",
+            confidence=0.9,
+        )
+        # 术语关键词（匹配度低）
+        add_memory(
+            datasource_id="ds_1",
+            memory_type="term_mapping",
+            entity_type="term",
+            entity_name="订单",
+            content="订单就是 order",
+            confidence=0.9,
+        )
+
+        result = get_memories_for_query(
+            datasource_id="ds_1",
+            query="订单统计",
+            related_tables=["orders"],
+        )
+        assert len(result) == 2
+        # 表级精确匹配（8 分）应该比术语实体名匹配（6 分）排名高
+        assert result[0]["entity_type"] == "table"

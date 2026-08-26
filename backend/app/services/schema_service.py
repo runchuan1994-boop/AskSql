@@ -56,6 +56,9 @@ def get_project_schemas(project_id: str) -> list[dict]:
                 }
                 for t in ds_schema.db_schema.tables
             ]
+            from app.services.profiling_service import get_profiling_status
+            prof_status = get_profiling_status(ds_id)
+
             results.append({
                 "datasource_id": ds_schema.datasource_id or ds_id,
                 "datasource_name": ds_schema.datasource_name or ds_name,
@@ -64,6 +67,10 @@ def get_project_schemas(project_id: str) -> list[dict]:
                 "port": ds_port,
                 "database": ds_database,
                 "tables": tables,
+                "profiling_status": prof_status["status"],
+                "row_count_total": sum(
+                    t.row_count or 0 for t in ds_schema.db_schema.tables
+                ),
             })
         except Exception:
             results.append({
@@ -117,10 +124,17 @@ def get_table_detail(datasource_id: str, table_name: str) -> dict | None:
             "name": col.name,
             "type": col.type,
             "description": col.description,
+            "business_name": col.business_name,
             "is_primary_key": col.is_primary_key,
             "is_foreign_key": col.is_foreign_key,
             "semantic_type": col.semantic_type,
             "enum_values": col.enum_values,
+            "calc_formula": col.calc_formula,
+            "distinct_count": col.distinct_count,
+            "top_values": col.top_values,
+            "value_min": col.value_min,
+            "value_max": col.value_max,
+            "null_rate": col.null_rate,
         }
         for col in table.columns
     ]
@@ -128,6 +142,13 @@ def get_table_detail(datasource_id: str, table_name: str) -> dict | None:
     return {
         "name": table.name,
         "description": table.description,
+        "aliases": table.aliases,
+        "business_domain": table.business_domain,
+        "row_count": table.row_count,
+        "update_frequency": table.update_frequency,
+        "common_dimensions": table.common_dimensions,
+        "common_metrics": table.common_metrics,
         "columns": columns,
+        "sample_rows": table.sample_rows,
         "examples": table.examples,
     }

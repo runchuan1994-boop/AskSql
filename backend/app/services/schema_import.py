@@ -152,6 +152,10 @@ def import_schema_from_database(datasource_id: str, use_llm: bool = False) -> di
         finally:
             conn.close()
 
+        # 启动异步探测
+        from app.services.profiling_service import start_profiling
+        start_profiling(datasource_id)
+
         return {
             "success": True,
             "table_count": len(tables_info),

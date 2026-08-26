@@ -16,6 +16,8 @@ def _reload_app_modules(tmpdir: str):
     os.environ["APP_DATA_DIR"] = os.path.join(tmpdir, "data")
     os.environ["APP_DATABASE_URL"] = f"sqlite:///{tmpdir}/data/test.db"
     os.environ["APP_SCHEMAS_DIR"] = os.path.join(tmpdir, "config", "schemas")
+    # 禁用沙箱执行器，使用本地 GenericSQLExecutor 直接访问测试数据库
+    os.environ["SANDBOX_ENABLED"] = "false"
 
     from app.core import config as config_mod
 

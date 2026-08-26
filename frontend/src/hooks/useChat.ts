@@ -12,6 +12,11 @@ import { getMessages, sendChatMessage } from '../lib/api'
 import type { Message, SseEvent, QueryResult, ThinkingStage, VizSpec, ThinkingStep } from '../lib/types'
 import { useSSE } from './useSSE'
 
+export interface MemorySavedNotice {
+  content: string
+  entityName: string | null
+}
+
 export interface UseChatReturn {
   messages: Message[]
   isLoading: boolean
@@ -21,6 +26,7 @@ export interface UseChatReturn {
   thinkingSteps: ThinkingStep[]
   awaitingClarification: boolean
   clarificationQuestions: string[]
+  memorySavedNotice: MemorySavedNotice | null
   sendMessage: (content: string, datasourceId?: string) => Promise<void>
   loadMessages: (sessionId: string) => Promise<void>
   clearMessages: () => void
@@ -36,10 +42,14 @@ export function useChat(sessionId: string | null): UseChatReturn {
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([])
   const [awaitingClarification, setAwaitingClarification] = useState(false)
   const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([])
+  const [memorySavedNotice, setMemorySavedNotice] = useState<MemorySavedNotice | null>(null)
 
   // 跟踪流式过程中的临时状态
   const tempSqlRef = useRef<string>('')
   const tempClarificationRef = useRef<string[]>([])
+  const memoryNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 思考步骤用 ref 同步跟踪（供 final_result 时附加到消息上）
+  const thinkingStepsRef = useRef<ThinkingStep[]>([])
 
   const handleEvent = useCallback((evt: SseEvent) => {
     switch (evt.event) {
@@ -125,17 +135,14 @@ export function useChat(sessionId: string | null): UseChatReturn {
         break
       case 'step_detail': {
         const stepData = evt.data as unknown as ThinkingStep
-        setThinkingSteps((prev) => {
-          const idx = prev.findIndex((s) => s.step === stepData.step)
-          if (idx >= 0) {
-            // Update existing step
-            const updated = [...prev]
-            updated[idx] = { ...updated[idx], ...stepData }
-            return updated
-          }
-          // Add new step
-          return [...prev, stepData]
-        })
+        // 同步更新 ref（供 final_result 使用）
+        const idx = thinkingStepsRef.current.findIndex((s) => s.step === stepData.step)
+        if (idx >= 0) {
+          thinkingStepsRef.current[idx] = { ...thinkingStepsRef.current[idx], ...stepData }
+        } else {
+          thinkingStepsRef.current.push(stepData)
+        }
+        setThinkingSteps([...thinkingStepsRef.current])
         break
       }
       case 'final_result': {
@@ -160,6 +167,9 @@ export function useChat(sessionId: string | null): UseChatReturn {
             ? { questions: clarifQs, resolved: false }
             : undefined,
           query_assumptions: queryAssumptions.length > 0 ? queryAssumptions : undefined,
+          thinking_steps: thinkingStepsRef.current.length > 0
+            ? [...thinkingStepsRef.current]
+            : undefined,
         }
         setMessages((prev) => {
           const last = prev[prev.length - 1]
@@ -182,9 +192,49 @@ export function useChat(sessionId: string | null): UseChatReturn {
         tempClarificationRef.current = []
         break
       }
-      case 'error':
-        setError((evt.data.message as string) || '发生错误')
+      case 'memory_saved': {
+        const content = evt.data.content
+        if (typeof content === 'string' && content.trim()) {
+          const entityName =
+            typeof evt.data.entity_name === 'string' ? evt.data.entity_name : null
+          setMemorySavedNotice({ content: content.trim(), entityName })
+          // 清除之前的定时器
+          if (memoryNoticeTimerRef.current) {
+            clearTimeout(memoryNoticeTimerRef.current)
+          }
+          // 4 秒后自动隐藏
+          memoryNoticeTimerRef.current = setTimeout(() => {
+            setMemorySavedNotice(null)
+            memoryNoticeTimerRef.current = null
+          }, 4000)
+        }
         break
+      }
+      case 'error': {
+        const errorMsg = (evt.data.message as string) || '发生错误'
+        setError(errorMsg)
+        // 同时作为一条错误消息插入对话流
+        const errorMsgObj: Message = {
+          id: `assistant-error-${Date.now()}`,
+          session_id: '',
+          role: 'assistant',
+          content: errorMsg,
+          created_at: new Date().toISOString(),
+          is_error: true,
+          thinking_steps: thinkingStepsRef.current.length > 0
+            ? [...thinkingStepsRef.current]
+            : undefined,
+        }
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          // 如果最后一条是占位的空 assistant 消息，替换掉
+          if (last && last.role === 'assistant' && !last.content) {
+            return [...prev.slice(0, -1), errorMsgObj]
+          }
+          return [...prev, errorMsgObj]
+        })
+        break
+      }
       case 'done':
       case 'chat_done': {
         const doneStatus = (evt.data.status as string) || 'done'
@@ -291,8 +341,14 @@ export function useChat(sessionId: string | null): UseChatReturn {
     setThinkingSteps([])
     setAwaitingClarification(false)
     setClarificationQuestions([])
+    setMemorySavedNotice(null)
     tempSqlRef.current = ''
     tempClarificationRef.current = []
+    thinkingStepsRef.current = []
+    if (memoryNoticeTimerRef.current) {
+      clearTimeout(memoryNoticeTimerRef.current)
+      memoryNoticeTimerRef.current = null
+    }
   }, [])
 
   // sessionId 变化时加载消息
@@ -375,6 +431,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
     thinkingSteps,
     awaitingClarification,
     clarificationQuestions,
+    memorySavedNotice,
     sendMessage,
     loadMessages,
     clearMessages,

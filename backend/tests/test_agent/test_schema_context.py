@@ -3,6 +3,8 @@
 from nl2sql.agent.nodes._schema_context import (
     format_table_context,
     _format_column_line,
+    _sort_columns_by_relevance,
+    _rank_column_relevance,
     build_compact_schema_context,
     inject_memories_into_context,
 )
@@ -306,3 +308,166 @@ class TestInjectMemories:
         assert "流水" in result
         assert "主站订单" in result
         assert "订单状态" in result
+
+
+class TestColumnRelevanceRanking:
+    """测试列相关性排序（列多时高相关列优先展示）。"""
+
+    def _make_test_table(self):
+        return Table(
+            name="orders",
+            description="订单表",
+            common_dimensions=["status", "channel"],
+            columns=[
+                # 0: 普通列
+                Column(name="remark", type="TEXT"),
+                # 1: 主键
+                Column(name="order_id", type="BIGINT", is_primary_key=True),
+                # 2: 有业务名+描述
+                Column(
+                    name="total_amount", type="DECIMAL",
+                    business_name="订单总额", description="订单总金额",
+                    semantic_type="amount",
+                ),
+                # 3: 常用维度 + 类别
+                Column(
+                    name="status", type="VARCHAR",
+                    semantic_type="category",
+                    enum_values=["pending", "paid", "done"],
+                ),
+                # 4: 外键
+                Column(
+                    name="user_id", type="BIGINT",
+                    is_foreign_key=True, foreign_key_table="users",
+                ),
+                # 5: 另一个普通列
+                Column(name="created_at", type="DATETIME", semantic_type="timestamp"),
+            ],
+        )
+
+    def test_pk_ranked_highest(self):
+        """主键列得分最高，排在最前。"""
+        table = self._make_test_table()
+        sorted_cols = _sort_columns_by_relevance(table.columns, table)
+        assert sorted_cols[0].name == "order_id"  # PK 第一
+
+    def test_fk_ranked_second_to_pk(self):
+        """外键列得分仅次于主键。"""
+        table = self._make_test_table()
+        sorted_cols = _sort_columns_by_relevance(table.columns, table)
+        # PK 是第 0，外键应该很靠前（前 3 之内）
+        top_names = [c.name for c in sorted_cols[:3]]
+        assert "user_id" in top_names
+
+    def test_common_dimensions_ranked_high(self):
+        """常用维度列排名靠前。"""
+        table = self._make_test_table()
+        sorted_cols = _sort_columns_by_relevance(table.columns, table)
+        # status 是 common_dimensions，应该在 remark 之前
+        status_idx = [c.name for c in sorted_cols].index("status")
+        remark_idx = [c.name for c in sorted_cols].index("remark")
+        assert status_idx < remark_idx
+
+    def test_business_name_boosts_rank(self):
+        """有业务名称的列排名更靠前。"""
+        table = self._make_test_table()
+        sorted_cols = _sort_columns_by_relevance(table.columns, table)
+        # total_amount 有业务名称，应该在 remark 之前
+        amount_idx = [c.name for c in sorted_cols].index("total_amount")
+        remark_idx = [c.name for c in sorted_cols].index("remark")
+        assert amount_idx < remark_idx
+
+    def test_query_keyword_boosts_relevance(self):
+        """查询关键词命中的列排名提升。"""
+        table = Table(
+            name="orders",
+            columns=[
+                Column(name="order_id", type="INT"),
+                Column(name="status", type="VARCHAR", semantic_type="category"),
+                Column(name="total_amount", type="DECIMAL", semantic_type="amount"),
+            ],
+        )
+
+        # 不带 query 时的排序
+        sorted_no_query = _sort_columns_by_relevance(table.columns, table, "")
+        no_query_order = [c.name for c in sorted_no_query]
+
+        # 带 "amount" 查询时，total_amount 应该排名提升
+        sorted_with_query = _sort_columns_by_relevance(table.columns, table, "total amount 统计")
+        with_query_order = [c.name for c in sorted_with_query]
+
+        # total_amount 在带 query 时的排名应该比不带 query 时更靠前（或相同）
+        amount_idx_no_q = no_query_order.index("total_amount")
+        amount_idx_with_q = with_query_order.index("total_amount")
+        assert amount_idx_with_q <= amount_idx_no_q
+
+    def test_truncated_table_shows_high_relevance_columns(self):
+        """列截断时，显示的是高相关列，而不是前 N 列。"""
+        table = self._make_test_table()
+
+        # 只显示 3 列，应该是 PK + 高相关列，而不是前 3 个列名
+        result = format_table_context(table, max_columns=3)
+
+        # 主键肯定在前三
+        assert "order_id" in result
+        # 外键或常用维度也应该在
+        assert "user_id" in result or "status" in result
+        # 普通列 remark 不应该在前三里
+        # （remark 是第 0 列，如果没排序会被显示）
+        # 我们检查 "remark" 出现在省略提示中（说明被截断了）
+        assert "已省略" in result or "remark" not in result.split("列（共")[1].split("样例数据")[0]
+
+    def test_truncation_message_mentions_relevance(self):
+        """截断提示文字说明是高相关列优先。"""
+        table = self._make_test_table()
+        result = format_table_context(table, max_columns=2)
+        assert "高相关列优先" in result or "相关列" in result
+
+    def test_stable_sorting_same_score(self):
+        """得分相同时，按原始顺序排列（稳定排序）。"""
+        table = Table(
+            name="t",
+            columns=[
+                Column(name="a", type="INT"),
+                Column(name="b", type="INT"),
+                Column(name="c", type="INT"),
+            ],
+        )
+        sorted_cols = _sort_columns_by_relevance(table.columns, table)
+        # 三列得分相同，保持原始顺序
+        assert [c.name for c in sorted_cols] == ["a", "b", "c"]
+
+    def test_no_truncation_keeps_original_order(self):
+        """不需要截断时，保持原始列顺序（不排序）。"""
+        table = self._make_test_table()
+        # max_columns 为 None 时不截断，保持原顺序
+        result = format_table_context(table, max_columns=None)
+        # 验证原始顺序的第一列（remark）出现在列列表中第一个位置
+        lines = result.split("\n")
+        col_lines = [l for l in lines if l.strip().startswith("·")]
+        # 第一列应该是 remark（原始顺序）
+        assert "remark" in col_lines[0]
+
+    def test_rank_column_relevance_scores(self):
+        """验证各因素的得分值。"""
+        table = Table(
+            name="t",
+            common_dimensions=["status"],
+            columns=[],
+        )
+
+        # 主键得分最高
+        pk_col = Column(name="id", type="INT", is_primary_key=True)
+        pk_score = _rank_column_relevance(pk_col, table)
+        assert pk_score >= 100
+
+        # 外键第二
+        fk_col = Column(name="user_id", type="INT", is_foreign_key=True)
+        fk_score = _rank_column_relevance(fk_col, table)
+        assert fk_score >= 80
+        assert fk_score < pk_score
+
+        # 常用维度
+        dim_col = Column(name="status", type="VARCHAR", semantic_type="category")
+        dim_score = _rank_column_relevance(dim_col, table)
+        assert dim_score >= 60

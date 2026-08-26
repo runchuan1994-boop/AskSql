@@ -209,6 +209,7 @@ class DispatcherAgent:
         user_query: str,
         conversation_history: list | None = None,
         selected_datasource_id: str | None = None,
+        extra_state: dict | None = None,
     ) -> dict:
         """运行 NL2SQLAgent 处理数据查询."""
         from nl2sql.agent.graph import NL2SQLAgent
@@ -221,7 +222,9 @@ class DispatcherAgent:
             max_iterations=self.max_iterations,
             max_probe_iterations=self.max_probe_iterations,
         )
-        return agent.run(user_query, conversation_history, selected_datasource_id)
+        return agent.run(
+            user_query, conversation_history, selected_datasource_id, extra_state
+        )
 
     def _run_schema_exploration(self, user_query: str, conversation_history: list | None = None) -> dict:
         """运行 SchemaExplorerAgent 处理 schema 探索."""
@@ -259,6 +262,7 @@ class DispatcherAgent:
         user_query: str,
         conversation_history: list | None = None,
         selected_datasource_id: str | None = None,
+        extra_state: dict | None = None,
     ) -> dict:
         """运行完整的分发 + 执行流程.
 
@@ -306,7 +310,9 @@ class DispatcherAgent:
 
         # Step 2: 路由到对应子 Agent
         if dispatch.intent == "query":
-            result = self._run_query(user_query, conversation_history, selected_datasource_id)
+            result = self._run_query(
+                user_query, conversation_history, selected_datasource_id, extra_state
+            )
             result["intent"] = result.get("intent", "query")
 
         elif dispatch.intent == "schema_exploration":

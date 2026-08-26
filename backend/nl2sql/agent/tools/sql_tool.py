@@ -38,9 +38,15 @@ SQL_TOOL_DEFINITION: dict = {
 # Helper
 # ---------------------------------------------------------------------------
 
-def _get_executor(state: "AgentState", datasource_id: str | None = None):
-    """Get the executor for a datasource, or None."""
-    executors = getattr(state, "datasource_executors", None)
+def _get_executor(state, datasource_id: str | None = None):
+    """Get the executor for a datasource, or None.
+
+    Compatible with both dict state (LangGraph runtime) and Pydantic model state (tests).
+    """
+    if isinstance(state, dict):
+        executors = state.get("datasource_executors")
+    else:
+        executors = getattr(state, "datasource_executors", None)
     if not executors:
         return None, "未配置数据源执行器 (datasource_executors)。"
 

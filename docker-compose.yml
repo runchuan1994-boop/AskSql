@@ -26,6 +26,7 @@ services:
       - SANDBOX_TIMEOUT=${SANDBOX_TIMEOUT:-30}
       - SANDBOX_POOL_MAX=${SANDBOX_POOL_MAX:-4}
       - SANDBOX_NETWORK=${SANDBOX_NETWORK:-false}
+      - SANDBOX_NETWORK_MODE=${COMPOSE_PROJECT_NAME}_default
     volumes:
       - ./backend/data:/app/data
       - ./backend/config:/app/config

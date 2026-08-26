@@ -42,17 +42,29 @@ def _determine_datasource_id(state: dict) -> str | None:
     return None
 
 
-def _get_executor(state: dict, datasource_id: str):
-    """Get executor from state.datasource_executors."""
-    executors = getattr(state, "datasource_executors", None)
+def _get_executor(state: dict | Any, datasource_id: str):
+    """Get executor from state.datasource_executors.
+
+    Compatible with both dict state (LangGraph runtime) and Pydantic model state (tests).
+    """
+    if isinstance(state, dict):
+        executors = state.get("datasource_executors")
+    else:
+        executors = getattr(state, "datasource_executors", None)
     if not executors:
         return None
     return executors.get(datasource_id)
 
 
-def _send_event(state: dict, event_type: str, data: dict | None = None) -> None:
-    """Send an event via callback if set."""
-    callback = getattr(state, "event_callback", None)
+def _send_event(state: dict | Any, event_type: str, data: dict | None = None) -> None:
+    """Send an event via callback if set.
+
+    Compatible with both dict state (LangGraph runtime) and Pydantic model state (tests).
+    """
+    if isinstance(state, dict):
+        callback = state.get("event_callback")
+    else:
+        callback = getattr(state, "event_callback", None)
     if callback is not None:
         try:
             callback(event_type, data or {})

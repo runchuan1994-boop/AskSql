@@ -67,6 +67,9 @@ export const zhCN = {
   'schema.noData': '暂无数据源 Schema',
   'schema.noTables': '暂无表',
   'schema.columns': '列',
+  'schema.memories': '记忆',
+  'schema.addMemory': '添加记忆',
+  'schema.searchMemories': '搜索记忆',
 
   // Datasource
   'datasource.loading': '加载中...',

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.services import schema_service
+from app.services import profiling_service
 
 router = APIRouter(prefix="/schema", tags=["schema"])
 
@@ -21,3 +22,17 @@ def get_table_detail(datasource_id: str, table_name: str):
     if table is None:
         raise HTTPException(status_code=404, detail="表或数据源不存在")
     return table
+
+
+@router.post("/profile/{datasource_id}")
+def start_schema_profiling(datasource_id: str):
+    """启动指定数据源的 schema 探测."""
+    result = profiling_service.start_profiling(datasource_id)
+    return result
+
+
+@router.get("/profile/{datasource_id}/status")
+def get_profiling_status(datasource_id: str):
+    """获取 schema 探测状态."""
+    status = profiling_service.get_profiling_status(datasource_id)
+    return status

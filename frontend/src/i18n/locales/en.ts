@@ -69,6 +69,9 @@ export const en: Record<TranslationKey, string> = {
   'schema.noData': 'No data source schema',
   'schema.noTables': 'No tables',
   'schema.columns': 'cols',
+  'schema.memories': 'Memories',
+  'schema.addMemory': 'Add Memory',
+  'schema.searchMemories': 'Search memories',
 
   // Datasource
   'datasource.loading': 'Loading...',

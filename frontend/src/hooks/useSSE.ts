@@ -72,6 +72,7 @@ export function useSSE(
         'dispatch_result',
         'intent_analysis',
         'intent_probe',
+        'query_rewrite',
         'clarification_needed',
         'sql_generated',
         'sql_executing',
@@ -99,6 +100,8 @@ export function useSSE(
         'done',
         'chat_done',
         'heartbeat',
+        'step_detail',
+        'memory_saved',
       ]
 
       allEvents.forEach((evtName) => {

@@ -62,9 +62,15 @@ def _build_result_summary(exec_result, max_rows: int = 50) -> str:
     return "\n".join(lines)
 
 
-def _send_event(state: dict, event_type: str, data: dict | None = None) -> None:
-    """Send an event via callback if set."""
-    callback = getattr(state, "event_callback", None)
+def _send_event(state: dict | Any, event_type: str, data: dict | None = None) -> None:
+    """Send an event via callback if set.
+
+    Compatible with both dict state (LangGraph runtime) and Pydantic model state (tests).
+    """
+    if isinstance(state, dict):
+        callback = state.get("event_callback")
+    else:
+        callback = getattr(state, "event_callback", None)
     if callback is not None:
         try:
             callback(event_type, data or {})
@@ -94,6 +100,22 @@ def summarize_node(state: dict) -> dict:
             final_answer = f"抱歉，查询执行遇到问题：{error_msg}"
             if sql:
                 final_answer += f"\n\n尝试执行的 SQL：\n```sql\n{sql}\n```"
+
+            # 待确认记忆（即使失败也确认）
+            pending_memories = state.get("pending_memories", []) or []
+            if pending_memories:
+                confirm_lines = ["\n"]
+                if len(pending_memories) == 1:
+                    mem = pending_memories[0]
+                    confirm_lines.append(
+                        f"另外，我记下了：{mem.get('content', '')}。"
+                    )
+                else:
+                    confirm_lines.append("另外，我记下了几点：")
+                    for i, mem in enumerate(pending_memories):
+                        confirm_lines.append(f"{i+1}. {mem.get('content', '')}")
+                confirm_lines.append("以后我会注意这些区别 👌")
+                final_answer += "\n".join(confirm_lines)
 
             _send_event(state, "final_result", {
                 "answer": final_answer,
@@ -149,6 +171,22 @@ def summarize_node(state: dict) -> dict:
 
         final_answer = response.content.strip()
 
+        # 待确认记忆：在回答末尾追加确认语句
+        pending_memories = state.get("pending_memories", []) or []
+        if pending_memories:
+            confirm_lines = ["\n"]
+            if len(pending_memories) == 1:
+                mem = pending_memories[0]
+                confirm_lines.append(
+                    f"另外，我记下了：{mem.get('content', '')}。"
+                )
+            else:
+                confirm_lines.append("另外，我记下了几点：")
+                for i, mem in enumerate(pending_memories):
+                    confirm_lines.append(f"{i+1}. {mem.get('content', '')}")
+            confirm_lines.append("以后我会注意这些区别 👌")
+            final_answer += "\n".join(confirm_lines)
+
         _send_event(state, "final_result", {
             "answer": final_answer,
             "success": True,
@@ -157,6 +195,7 @@ def summarize_node(state: dict) -> dict:
             "viz": state.get("viz_spec"),
             "query_assumptions": query_assumptions,
             "rewritten_query": state.get("rewritten_query"),
+            "pending_memories": pending_memories,
             "result": {
                 "columns": exec_result.columns,
                 "rows": [list(r) for r in exec_result.rows[:100]],

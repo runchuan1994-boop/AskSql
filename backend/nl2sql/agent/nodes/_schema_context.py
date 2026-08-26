@@ -11,6 +11,71 @@ if TYPE_CHECKING:
     from ..state import AgentState
 
 
+def _rank_column_relevance(col: Column, table: Table, query: str = "") -> float:
+    """计算列的相关性得分，用于列截断时的优先级排序。
+
+    得分越高越重要，截断时优先保留。
+    评分规则（加分项）：
+    - 主键列: +100
+    - 外键列: +80
+    - 常用维度列: +60（在 common_dimensions 中）
+    - 有业务名称: +30
+    - 有描述: +20
+    - 有枚举值: +15
+    - 语义类型为 amount/timestamp/category: +10 (比默认的 id/other 更有分析价值)
+    - 查询关键词命中（简单包含）: +25
+    """
+    score = 0.0
+
+    if col.is_primary_key:
+        score += 100
+
+    if col.is_foreign_key:
+        score += 80
+
+    if col.name in table.common_dimensions:
+        score += 60
+
+    if col.business_name:
+        score += 30
+
+    if col.description:
+        score += 20
+
+    if col.enum_values:
+        score += 15
+
+    if col.semantic_type in ("amount", "timestamp", "category"):
+        score += 10
+
+    if query and col.name.lower() in query.lower():
+        score += 25
+    if query and col.business_name and col.business_name.lower() in query.lower():
+        score += 25
+
+    return score
+
+
+def _sort_columns_by_relevance(
+    columns: list[Column],
+    table: Table,
+    query: str = "",
+) -> list[Column]:
+    """按相关性对列排序，高相关列在前。
+
+    注意：主键列始终在最前，然后是高相关列，
+    其余列尽量保持原始顺序（稳定排序）。
+    """
+    indexed = list(enumerate(columns))  # (original_index, column)
+    indexed.sort(
+        key=lambda pair: (
+            -_rank_column_relevance(pair[1], table, query),  # 得分降序
+            pair[0],  # 同分按原始顺序（稳定）
+        )
+    )
+    return [col for _, col in indexed]
+
+
 def _format_column_line(col: Column) -> str:
     """格式化单列信息为紧凑的一行。"""
     parts = [f"  · {col.name}: {col.type}"]
@@ -94,12 +159,17 @@ def _format_sample_rows(table: Table, max_rows: int = 3) -> list[str]:
     return lines
 
 
-def format_table_context(table: Table, max_columns: int | None = None) -> str:
+def format_table_context(
+    table: Table,
+    max_columns: int | None = None,
+    query: str = "",
+) -> str:
     """格式化单表的详细 schema context。
 
     Args:
         table: 表对象
         max_columns: 最多显示多少列，None 表示全部显示
+        query: 用户查询（用于列相关性排序，可选）
 
     Returns:
         格式化后的文本
@@ -140,13 +210,14 @@ def format_table_context(table: Table, max_columns: int | None = None) -> str:
     if table.update_frequency:
         lines.append(f"更新频率: {table.update_frequency}")
 
-    # 列
-    columns = table.columns
+    # 列：按相关性排序后截断（高相关列在前）
+    columns = list(table.columns)
+    truncated = False
     if max_columns is not None and len(columns) > max_columns:
+        # 只在需要截断时才排序，否则保持原始顺序
+        columns = _sort_columns_by_relevance(columns, table, query)
         columns = columns[:max_columns]
         truncated = True
-    else:
-        truncated = False
 
     lines.append("")
     lines.append(f"列（共 {len(table.columns)} 列）:")
@@ -154,7 +225,8 @@ def format_table_context(table: Table, max_columns: int | None = None) -> str:
         lines.append(_format_column_line(col))
 
     if truncated:
-        lines.append(f"  ... 还有 {len(table.columns) - max_columns} 列已省略")
+        hidden = len(table.columns) - max_columns
+        lines.append(f"  ... 还有 {hidden} 列已省略（高相关列优先展示）")
 
     # 样例数据
     sample_lines = _format_sample_rows(table, max_rows=3)
@@ -174,6 +246,8 @@ def build_detailed_schema_context(
     Returns:
         (schema_text, db_type)
     """
+    user_query = state.get("user_query", "") or ""
+
     # 确定哪些表需要展示
     intent_tables = []
     if state.get("intent") and state.get("intent").tables:
@@ -223,7 +297,11 @@ def build_detailed_schema_context(
                 current_ds = m.datasource_id
 
         tbl = m.table
-        lines.append(format_table_context(tbl, max_columns=max_columns_per_table))
+        lines.append(format_table_context(
+            tbl,
+            max_columns=max_columns_per_table,
+            query=user_query,
+        ))
         lines.append("")
 
     return "\n".join(lines), db_type

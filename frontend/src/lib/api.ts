@@ -13,6 +13,7 @@ import type {
   MemoryType,
   EntityType,
   MemoryListResult,
+  ProfilingStatus,
 } from './types'
 
 const BASE = '/api'
@@ -111,6 +112,21 @@ export function getTableDetail(
 ): Promise<TableDetail> {
   return request<TableDetail>(
     `/schema/table/${encodeURIComponent(datasourceId)}/${encodeURIComponent(tableName)}`,
+  )
+}
+
+// ---------- Schema 探测 ----------
+
+export function startProfiling(datasourceId: string): Promise<{ status: string; message?: string }> {
+  return request<{ status: string; message?: string }>(
+    `/schema/profile/${encodeURIComponent(datasourceId)}`,
+    { method: 'POST' },
+  )
+}
+
+export function getProfilingStatus(datasourceId: string): Promise<ProfilingStatus> {
+  return request<ProfilingStatus>(
+    `/schema/profile/${encodeURIComponent(datasourceId)}/status`,
   )
 }
 

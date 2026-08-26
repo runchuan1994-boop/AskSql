@@ -45,9 +45,15 @@ CONNECT_DS_SYSTEM_PROMPT = """你是一个数据源连接助手，负责帮助�
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _send_event(state: dict, event_type: str, data: dict | None = None) -> None:
-    """Send an event via callback if set."""
-    callback = getattr(state, "event_callback", None)
+def _send_event(state: dict | Any, event_type: str, data: dict | None = None) -> None:
+    """Send an event via callback if set.
+
+    Compatible with both dict state (LangGraph runtime) and Pydantic model state (tests).
+    """
+    if isinstance(state, dict):
+        callback = state.get("event_callback")
+    else:
+        callback = getattr(state, "event_callback", None)
     if callback is not None:
         try:
             callback(event_type, data or {})

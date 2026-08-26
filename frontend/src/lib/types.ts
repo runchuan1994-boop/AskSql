@@ -45,6 +45,10 @@ export interface Message {
   }
   /** 查询改写时做出的合理假设列表（减少澄清时展示） */
   query_assumptions?: string[]
+  /** 是否为错误消息 */
+  is_error?: boolean
+  /** 思考步骤（流式过程中及完成后展示） */
+  thinking_steps?: ThinkingStep[]
 }
 
 // ---------- 数据源 ----------
@@ -78,6 +82,24 @@ export interface DatasourceSchemaOverview {
   database: string
   tables?: SchemaTable[]
   note?: string
+  profiling_status?: string
+  total_rows?: number
+}
+
+export interface ProfilingStatus {
+  status: 'idle' | 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+  message?: string
+  progress?: number
+  total_tables?: number
+  completed_tables?: number
+  started_at?: string
+  completed_at?: string
+}
+
+export interface TopValue {
+  value: string
+  count?: number
+  ratio?: number
 }
 
 export interface ColumnDetail {
@@ -88,6 +110,20 @@ export interface ColumnDetail {
   is_foreign_key: boolean
   semantic_type: string | null
   enum_values: string[]
+  // ---- 增肥字段 ----
+  business_name?: string
+  calc_formula?: string
+  distinct_count?: number | null
+  top_values?: TopValue[]
+  value_min?: string | number | null
+  value_max?: string | number | null
+  null_count?: number | null
+  null_rate?: number | null
+}
+
+export interface CommonMetric {
+  name: string
+  expression?: string
 }
 
 export interface TableDetail {
@@ -95,6 +131,14 @@ export interface TableDetail {
   description: string
   columns: ColumnDetail[]
   examples: Record<string, unknown>[]
+  // ---- 增肥字段 ----
+  aliases?: string[]
+  business_domain?: string
+  row_count?: number | null
+  update_frequency?: string
+  common_dimensions?: string[]
+  common_metrics?: CommonMetric[]
+  sample_rows?: Record<string, unknown>[]
 }
 
 // ---------- SSE 事件 ----------
@@ -133,6 +177,7 @@ export type SseEventType =
   | 'heartbeat'
   | 'viz_ready'
   | 'step_detail'
+  | 'memory_saved'
 
 export interface SseEvent {
   event: SseEventType
@@ -207,6 +252,10 @@ export interface ChartSpec {
   sort?: 'asc' | 'desc' | null
   limit?: number
   stacked?: boolean
+  /** X 轴格式化方式: date / month / datetime / number / percent / currency 等 */
+  x_format?: string
+  /** Y 轴格式化方式: number / percent / currency / short 等 */
+  y_format?: string
   config?: Record<string, unknown>
 }
 

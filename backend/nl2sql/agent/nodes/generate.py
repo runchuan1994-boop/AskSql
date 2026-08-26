@@ -27,6 +27,40 @@ GENERATE_SYSTEM_PROMPT = """你是一位资深 SQL 工程师，擅长根据自�
 5. 只输出一个最终的 SQL 语句，不要输出多个备选。
 6. 如果有示例查询，可以参考其风格和模式。
 7. 尽量使用明确的列名，避免 SELECT *。
+
+**数据可读性原则（重要）**：
+
+生成的 SQL 结果应当便于人类阅读，遵循以下原则（在不牺牲正确性的前提下）：
+
+8. **给计算/聚合列起有意义的别名**：
+   - 不要用 `count`、`sum`、`total`、`col1` 等模糊名称
+   - 用能表达业务含义的名字，如 `monthly_sales`、`active_user_count`、`avg_order_amount`
+   - 别名风格与数据库中已有列保持一致（蛇形或驼峰参照已有表结构）
+
+9. **日期/时间字段按粒度格式化**：
+   - 按年聚合 → 格式化为年份（如 2024）
+   - 按月聚合 → 格式化为年-月（如 2024-01）
+   - 按日聚合 → 格式化为年-月-日（如 2024-01-15）
+   - 不要返回带时分秒的时间戳给按天/按月的统计结果
+   - 使用当前数据库方言的日期格式化函数（如 PostgreSQL 用 TO_CHAR，MySQL 用 DATE_FORMAT，SQLite 用 strftime）
+
+10. **数值精度合理**：
+    - 金额类：保留 2 位小数
+    - 百分比/比率：保留 1-2 位小数
+    - 计数/整数类：不要有小数
+    - 使用 ROUND / CAST 等函数控制精度，避免返回多位小数
+
+11. **排序符合直觉**：
+    - 时间趋势类 → 按时间正序（从早到晚）
+    - Top N / 排名类 → 按数值倒序（从大到小）
+    - 分类对比类 → 按数值倒序或按分类名正序
+    - 不要返回无意义顺序的结果
+
+12. **百分比/比率类用可读形式**：
+    - 如果是比例，乘以 100 并保留 1-2 位小数，让人一眼看懂（如 23.5 而不是 0.234567）
+    - 别名里注明是百分比（如 `growth_rate_pct`）
+
+注意：以上是"可读性"优化建议，优先级低于"正确性"。如果不确定最佳格式，以查询正确为第一原则，不要为了可读性引入计算错误。
 """
 
 
@@ -66,9 +100,15 @@ def _build_probe_findings_text(state: dict) -> str:
     return "\n".join(lines)
 
 
-def _send_event(state: dict, event_type: str, data: dict | None = None) -> None:
-    """Send an event via callback if set."""
-    callback = getattr(state, "event_callback", None)
+def _send_event(state: dict | Any, event_type: str, data: dict | None = None) -> None:
+    """Send an event via callback if set.
+
+    Compatible with both dict state (LangGraph runtime) and Pydantic model state (tests).
+    """
+    if isinstance(state, dict):
+        callback = state.get("event_callback")
+    else:
+        callback = getattr(state, "event_callback", None)
     if callback is not None:
         try:
             callback(event_type, data or {})

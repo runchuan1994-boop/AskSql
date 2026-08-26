@@ -8,9 +8,12 @@ def test_settings_import():
     assert settings is not None
 
 
-def test_settings_default_llm_provider():
+def test_settings_default_llm_provider(monkeypatch):
     """测试默认 LLM provider 为 claude。"""
-    from nl2sql import settings
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    # 通过 _env_file=None 跳过 .env 文件读取，直接测试类默认值
+    from nl2sql.config import Settings
+    settings = Settings(_env_file=None)
     assert settings.llm_provider == "claude"
 
 

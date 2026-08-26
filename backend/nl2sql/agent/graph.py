@@ -165,6 +165,7 @@ class NL2SQLAgent:
         user_query: str,
         conversation_history: list | None = None,
         selected_datasource_id: str | None = None,
+        extra_state: dict | None = None,
     ) -> dict:
         """运行一次完整的 Agent 流程（同步版本）。
 
@@ -204,6 +205,11 @@ class NL2SQLAgent:
         initial_state["datasource_executors"] = self.executors
         initial_state["event_callback"] = self.event_callback
 
+        # 合并额外的 state 字段（如 memory_retriever, pending_memories 等）
+        if extra_state:
+            for key, value in extra_state.items():
+                initial_state[key] = value
+
         # LangGraph invoke 返回 dict
         final_state = self._app.invoke(initial_state)
 
@@ -235,6 +241,7 @@ class NL2SQLAgent:
         user_query: str,
         conversation_history: list | None = None,
         selected_datasource_id: str | None = None,
+        extra_state: dict | None = None,
     ):
         """流式运行 Agent，yield 每个节点的状态更新。"""
         from .state import AgentState
@@ -252,6 +259,11 @@ class NL2SQLAgent:
         initial_state = state_obj.model_dump(exclude={"datasource_executors", "event_callback"}, mode="python")
         initial_state["datasource_executors"] = self.executors
         initial_state["event_callback"] = self.event_callback
+
+        # 合并额外的 state 字段
+        if extra_state:
+            for key, value in extra_state.items():
+                initial_state[key] = value
 
         for event in self._app.stream(initial_state):
             yield event

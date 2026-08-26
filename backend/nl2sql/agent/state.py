@@ -123,9 +123,14 @@ class AgentState(BaseModel):
     final_answer: Optional[str] = None
     error: Optional[str] = None
 
+    # Schema 记忆（从记忆库召回的相关记忆）
+    schema_memories: list[dict] = Field(default_factory=list)
+
     # 运行时注入（不参与序列化）
     event_callback: Any = None
     datasource_executors: dict = Field(default_factory=dict)
+    memory_retriever: Any = None  # 记忆召回回调函数
+    pending_memories: list[dict] = Field(default_factory=list)  # 待确认的记忆
 
     model_config = {"arbitrary_types_allowed": True}
 

@@ -33,3 +33,9 @@ backend/tests/test_prompts_runner.py
 backend/sandbox/
 backend/config/schemas/*/
 !backend/config/schemas/.gitkeep
+
+# Large model files (embedding models, etc.)
+backend/models/
+*.safetensors
+*.bin
+*.gguf

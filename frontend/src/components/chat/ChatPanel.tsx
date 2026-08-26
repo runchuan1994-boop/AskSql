@@ -13,6 +13,7 @@ import { useChat } from '../../hooks/useChat'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { DatasourceSelector } from './DatasourceSelector'
+import { MemorySavedToast } from './MemorySavedToast'
 import type { Session, Datasource } from '../../lib/types'
 import { createSession, listDatasources } from '../../lib/api'
 import { useTranslation } from '../../i18n'
@@ -30,7 +31,9 @@ export function ChatPanel({ projectId, session, onSessionCreated }: ChatPanelPro
     isLoading,
     isStreaming,
     thinkingSteps,
+    streamingSql,
     awaitingClarification,
+    memorySavedNotice,
     sendMessage,
     error,
   } = useChat(session?.id || null)
@@ -134,16 +137,10 @@ export function ChatPanel({ projectId, session, onSessionCreated }: ChatPanelPro
             isLoading={isLoading}
             isStreaming={isStreaming || !!pendingFirstMessage}
             thinkingSteps={thinkingSteps}
+            streamingSql={streamingSql}
           />
         )}
       </div>
-
-      {/* 错误提示 - 玻璃质感 */}
-      {error && (
-        <div className="px-4 py-2.5 bg-red-50/80 backdrop-blur text-red-600 text-sm border-t border-red-100/60">
-          {t('chat.errorPrefix')}: {error}
-        </div>
-      )}
 
       {/* 数据源选择器 + 输入框 - 玻璃质感底部 */}
       <div className="border-t border-white/40 bg-white/60 backdrop-blur-xl shrink-0">
@@ -168,6 +165,9 @@ export function ChatPanel({ projectId, session, onSessionCreated }: ChatPanelPro
           }
         />
       </div>
+
+      {/* 记忆保存提示 Toast */}
+      <MemorySavedToast notice={memorySavedNotice} />
     </div>
   )
 }
