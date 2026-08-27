@@ -15,6 +15,7 @@ from app.services import session_service
 from app.services.datasource_service import build_db_url, get_datasource
 from app.services.generation_log import log_generation
 from app.services.result_cache import result_cache
+from nl2sql.tracing import trace as _tracing_trace, flush as _tracing_flush
 
 
 # ---------------------------------------------------------------------------
@@ -406,204 +407,250 @@ def _run_chat_sync(session_id: str, user_query: str, loop: asyncio.AbstractEvent
         "pending_memories": pending_mems,
     }
 
-    start_time = time.perf_counter()
+    with _tracing_trace(
+        name="chat_turn",
+        user_id=session.get("user_id") or session_id,
+        session_id=session_id,
+        metadata={
+            "datasource_id": datasource_id,
+            "message_id": user_msg_id,
+            "project_id": project_id,
+        },
+        input=user_query,
+    ) as trace_ctx:
+        start_time = time.perf_counter()
 
-    try:
-        # 运行 dispatcher（同步，已经在线程里了）
-        result = dispatcher.run(user_query, history, datasource_id, extra_state)
+        try:
+            # 运行 dispatcher（同步，已经在线程里了）
+            result = dispatcher.run(user_query, history, datasource_id, extra_state)
 
-        execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+            execution_time_ms = int((time.perf_counter() - start_time) * 1000)
 
-        # 提取结果
-        answer = result.get("answer", "")
-        sql = result.get("sql", "")
-        exec_result = result.get("execution_result")
-        intent_obj = result.get("intent")  # 可能是 IntentResult 对象或字符串
-        iteration = result.get("iteration", 0)
-        react_thoughts = result.get("react_thoughts", [])
-        status = result.get("status", "unknown")
-        error = result.get("error")
-        intent_type = result.get("intent_type", "")
+            # 提取结果
+            answer = result.get("answer", "")
+            sql = result.get("sql", "")
+            exec_result = result.get("execution_result")
+            intent_obj = result.get("intent")  # 可能是 IntentResult 对象或字符串
+            iteration = result.get("iteration", 0)
+            react_thoughts = result.get("react_thoughts", [])
+            status = result.get("status", "unknown")
+            error = result.get("error")
+            intent_type = result.get("intent_type", "")
 
-        # 构建执行结果（仅 query 类型有）
-        success = exec_result is not None and exec_result.success if exec_result else False
-        # schema_exploration / connect_datasource 也视为成功如果 status 是 done
-        if not exec_result:
-            success = status == "done" and not error
+            # 构建执行结果（仅 query 类型有）
+            success = exec_result is not None and exec_result.success if exec_result else False
+            # schema_exploration / connect_datasource 也视为成功如果 status 是 done
+            if not exec_result:
+                success = status == "done" and not error
 
-        row_count = exec_result.row_count if exec_result and success else 0
-        result_data = None
-        if exec_result and success:
-            result_data = {
-                "columns": exec_result.columns,
-                "rows": [list(r) for r in exec_result.rows],
-                "row_count": exec_result.row_count,
-                "duration_ms": exec_result.duration_ms,
-                "truncated": exec_result.truncated,
-                "viz": result.get("viz_spec"),
-            }
-
-        # 查询改写假设：保存到 result_data 中，供前端展示
-        query_assumptions = result.get("query_assumptions", []) or []
-        if query_assumptions and result_data is not None:
-            result_data["query_assumptions"] = query_assumptions
-
-        # 澄清状态：将澄清问题作为消息内容保存，方便用户刷新后仍可见
-        clarification_questions = result.get("clarification_questions", []) or []
-        if status == "clarifying" and clarification_questions:
-            # 构造友好的引导文本
-            q_list = "\n".join(
-                f"{i+1}. {q}" for i, q in enumerate(clarification_questions)
-            )
-            answer = f"为了更准确地帮你查询，需要先确认几个问题：\n\n{q_list}\n\n请在下方输入框中回复你的想法。"
-            result_data = {
-                "columns": ["问题"],
-                "rows": [[q] for q in clarification_questions],
-                "row_count": len(clarification_questions),
-                "duration_ms": 0,
-                "truncated": False,
-                "is_clarification": True,
-                "clarification_questions": clarification_questions,
-            }
-
-        # 保存助手消息
-        msg_result = session_service.add_message(
-            session_id,
-            "assistant",
-            answer,
-            sql_text=sql or None,
-            result=result_data,
-        )
-        msg_id = msg_result.get("id", "")
-
-        # 将全量结果存入缓存，供分页接口使用（仅查询有结果时）
-        if exec_result and success and exec_result.rows:
-            result_cache.set(
-                f"msg:{msg_id}",
-                {
+            row_count = exec_result.row_count if exec_result and success else 0
+            result_data = None
+            if exec_result and success:
+                result_data = {
                     "columns": exec_result.columns,
                     "rows": [list(r) for r in exec_result.rows],
                     "row_count": exec_result.row_count,
-                    "success": exec_result.success,
+                    "duration_ms": exec_result.duration_ms,
+                    "truncated": exec_result.truncated,
+                    "viz": result.get("viz_spec"),
+                }
+
+            # 查询改写假设：保存到 result_data 中，供前端展示
+            query_assumptions = result.get("query_assumptions", []) or []
+            if query_assumptions and result_data is not None:
+                result_data["query_assumptions"] = query_assumptions
+
+            # 澄清状态：将澄清问题作为消息内容保存，方便用户刷新后仍可见
+            clarification_questions = result.get("clarification_questions", []) or []
+            if status == "clarifying" and clarification_questions:
+                # 构造友好的引导文本
+                q_list = "\n".join(
+                    f"{i+1}. {q}" for i, q in enumerate(clarification_questions)
+                )
+                answer = f"为了更准确地帮你查询，需要先确认几个问题：\n\n{q_list}\n\n请在下方输入框中回复你的想法。"
+                result_data = {
+                    "columns": ["问题"],
+                    "rows": [[q] for q in clarification_questions],
+                    "row_count": len(clarification_questions),
+                    "duration_ms": 0,
+                    "truncated": False,
+                    "is_clarification": True,
+                    "clarification_questions": clarification_questions,
+                }
+
+            # 更新 trace 输出和元数据
+            try:
+                trace_ctx.update(
+                    output=answer,
+                    metadata={
+                        "success": success,
+                        "status": status,
+                        "sql": sql[:500] if sql else "",
+                        "iteration": iteration,
+                        "intent_type": intent_type,
+                        "execution_time_ms": execution_time_ms,
+                    },
+                )
+            except Exception:
+                pass
+
+            # 保存助手消息
+            # 将 trace_id 存入 result_data（如果有），便于前端追踪
+            if result_data is not None and trace_ctx.id:
+                result_data["trace_id"] = trace_ctx.id
+
+            msg_result = session_service.add_message(
+                session_id,
+                "assistant",
+                answer,
+                sql_text=sql or None,
+                result=result_data,
+            )
+            msg_id = msg_result.get("id", "")
+
+            # 将全量结果存入缓存，供分页接口使用（仅查询有结果时）
+            if exec_result and success and exec_result.rows:
+                result_cache.set(
+                    f"msg:{msg_id}",
+                    {
+                        "columns": exec_result.columns,
+                        "rows": [list(r) for r in exec_result.rows],
+                        "row_count": exec_result.row_count,
+                        "success": exec_result.success,
+                    },
+                )
+
+            # 提取 intent summary
+            intent_summary = ""
+            if intent_obj and hasattr(intent_obj, "raw_analysis"):
+                intent_summary = intent_obj.raw_analysis or ""
+            elif isinstance(intent_obj, str):
+                intent_summary = intent_obj
+            if not intent_summary and intent_type:
+                intent_summary = intent_type
+            if not intent_summary and hasattr(intent_obj, "model_dump"):
+                intent_summary = json.dumps(intent_obj.model_dump(), ensure_ascii=False)[:200]
+
+            # 提取反思记录
+            reflection_notes = ""
+            if react_thoughts:
+                notes = []
+                for t in react_thoughts:
+                    if hasattr(t, "thought"):
+                        notes.append(t.thought)
+                reflection_notes = "; ".join(notes)[:500]
+
+            # 确定 datasource_id
+            selected_ds_id = result.get("datasource_id")
+            if not selected_ds_id and exec_result and dispatcher.executors:
+                # 从 dispatcher 执行器中找第一个（简化处理）
+                selected_ds_id = list(dispatcher.executors.keys())[0]
+
+            # 记录生成日志
+            log_generation(
+                project_id=project_id,
+                datasource_id=selected_ds_id,
+                session_id=session_id,
+                user_query=user_query,
+                generated_sql=sql,
+                intent_summary=intent_summary,
+                execution_success=success,
+                execution_time_ms=execution_time_ms,
+                row_count=row_count,
+                error_message=str(error) if error else (
+                    exec_result.error if exec_result and not success else None
+                ),
+                iteration=iteration,
+                reflection_notes=reflection_notes,
+                model="mock-model",
+                final_selected=success,
+            )
+
+            # 发送 chat_done 事件
+            loop.call_soon_threadsafe(
+                _send_event_sync, session_id, "chat_done",
+                {
+                    "status": status,
+                    "success": success,
+                    "sql": sql,
+                    "row_count": row_count,
+                    "trace_id": trace_ctx.id if trace_ctx.id else None,
                 },
             )
 
-        # 提取 intent summary
-        intent_summary = ""
-        if intent_obj and hasattr(intent_obj, "raw_analysis"):
-            intent_summary = intent_obj.raw_analysis or ""
-        elif isinstance(intent_obj, str):
-            intent_summary = intent_obj
-        if not intent_summary and intent_type:
-            intent_summary = intent_type
-        if not intent_summary and hasattr(intent_obj, "model_dump"):
-            intent_summary = json.dumps(intent_obj.model_dump(), ensure_ascii=False)[:200]
-
-        # 提取反思记录
-        reflection_notes = ""
-        if react_thoughts:
-            notes = []
-            for t in react_thoughts:
-                if hasattr(t, "thought"):
-                    notes.append(t.thought)
-            reflection_notes = "; ".join(notes)[:500]
-
-        # 确定 datasource_id
-        selected_ds_id = result.get("datasource_id")
-        if not selected_ds_id and exec_result and dispatcher.executors:
-            # 从 dispatcher 执行器中找第一个（简化处理）
-            selected_ds_id = list(dispatcher.executors.keys())[0]
-
-        # 记录生成日志
-        log_generation(
-            project_id=project_id,
-            datasource_id=selected_ds_id,
-            session_id=session_id,
-            user_query=user_query,
-            generated_sql=sql,
-            intent_summary=intent_summary,
-            execution_success=success,
-            execution_time_ms=execution_time_ms,
-            row_count=row_count,
-            error_message=str(error) if error else (
-                exec_result.error if exec_result and not success else None
-            ),
-            iteration=iteration,
-            reflection_notes=reflection_notes,
-            model="mock-model",
-            final_selected=success,
-        )
-
-        # 发送 chat_done 事件
-        loop.call_soon_threadsafe(
-            _send_event_sync, session_id, "chat_done",
-            {
-                "status": status,
-                "success": success,
-                "sql": sql,
-                "row_count": row_count,
-            },
-        )
-
-        # 确认本轮展示的待确认记忆（提升 confidence）
-        if pending_mems:
-            pending_ids = [m["id"] for m in pending_mems if m.get("id")]
-            confirm_pending_memories(session_id, pending_ids)
-
-    except Exception as e:
-        execution_time_ms = int((time.perf_counter() - start_time) * 1000)
-        error_msg = str(e)
-        traceback_str = traceback.format_exc()
-
-        # 保存错误消息
-        try:
-            session_service.add_message(
-                session_id,
-                "assistant",
-                f"抱歉，处理您的查询时出现错误：{error_msg}",
-                sql_text="",
-                result=None,
-            )
-        except Exception:
-            pass
-
-        # 记录生成日志（失败）
-        try:
-            log_generation(
-                project_id=project_id,
-                datasource_id=None,
-                session_id=session_id,
-                user_query=user_query,
-                generated_sql=None,
-                intent_summary=None,
-                execution_success=False,
-                execution_time_ms=execution_time_ms,
-                row_count=0,
-                error_message=error_msg,
-                iteration=0,
-                reflection_notes=traceback_str[:500],
-                model=None,
-                final_selected=False,
-            )
-        except Exception:
-            pass
-
-        # 发送错误和 chat_done 事件
-        loop.call_soon_threadsafe(
-            _send_event_sync, session_id, "error", {"message": error_msg},
-        )
-        loop.call_soon_threadsafe(
-            _send_event_sync, session_id, "chat_done",
-            {"status": "failed", "error": error_msg},
-        )
-
-        # 确认本轮展示的待确认记忆（即使出错也确认，因为 summarize 节点已显示确认文本）
-        try:
+            # 确认本轮展示的待确认记忆（提升 confidence）
             if pending_mems:
                 pending_ids = [m["id"] for m in pending_mems if m.get("id")]
                 confirm_pending_memories(session_id, pending_ids)
-        except Exception:
-            pass
+
+        except Exception as e:
+            execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+            error_msg = str(e)
+            traceback_str = traceback.format_exc()
+
+            # 更新 trace 错误元数据
+            try:
+                trace_ctx.update(
+                    metadata={
+                        "error": str(e),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
+            except Exception:
+                pass
+
+            # 保存错误消息
+            try:
+                session_service.add_message(
+                    session_id,
+                    "assistant",
+                    f"抱歉，处理您的查询时出现错误：{error_msg}",
+                    sql_text="",
+                    result=None,
+                )
+            except Exception:
+                pass
+
+            # 记录生成日志（失败）
+            try:
+                log_generation(
+                    project_id=project_id,
+                    datasource_id=None,
+                    session_id=session_id,
+                    user_query=user_query,
+                    generated_sql=None,
+                    intent_summary=None,
+                    execution_success=False,
+                    execution_time_ms=execution_time_ms,
+                    row_count=0,
+                    error_message=error_msg,
+                    iteration=0,
+                    reflection_notes=traceback_str[:500],
+                    model=None,
+                    final_selected=False,
+                )
+            except Exception:
+                pass
+
+            # 发送错误和 chat_done 事件
+            loop.call_soon_threadsafe(
+                _send_event_sync, session_id, "error", {"message": error_msg},
+            )
+            loop.call_soon_threadsafe(
+                _send_event_sync, session_id, "chat_done",
+                {"status": "failed", "error": error_msg},
+            )
+
+            # 确认本轮展示的待确认记忆（即使出错也确认，因为 summarize 节点已显示确认文本）
+            try:
+                if pending_mems:
+                    pending_ids = [m["id"] for m in pending_mems if m.get("id")]
+                    confirm_pending_memories(session_id, pending_ids)
+            except Exception:
+                pass
+
+        finally:
+            _tracing_flush()
 
 
 async def start_chat(session_id: str, user_query: str, datasource_id: str | None = None) -> str:
