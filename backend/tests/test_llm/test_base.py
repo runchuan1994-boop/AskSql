@@ -57,10 +57,10 @@ class TestLLMClient:
 
     def test_concrete_subclass_can_be_instantiated(self):
         class ConcreteClient(LLMClient):
-            def chat(self, messages, tools=None, temperature=0.0, max_tokens=4096):
+            def _chat_impl(self, messages, tools=None, temperature=0.0, max_tokens=4096):
                 return ChatResponse(content="hi")
 
-            def chat_stream(self, messages, tools=None, temperature=0.0, max_tokens=4096):
+            def _chat_stream_impl(self, messages, tools=None, temperature=0.0, max_tokens=4096):
                 yield ChatChunk(content_delta="hi", done=True)
 
         client = ConcreteClient()

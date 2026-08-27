@@ -14,6 +14,8 @@ from .message import Message, MessageRole, ToolCall, ToolCallResult
 class OpenAIClient(LLMClient):
     """Client for OpenAI-compatible APIs (official OpenAI and local models)."""
 
+    provider = "openai"
+
     def __init__(self, api_key: str, model: str, base_url: str = ""):
         kwargs: dict[str, Any] = {"api_key": api_key}
         if base_url:
@@ -72,7 +74,7 @@ class OpenAIClient(LLMClient):
             ))
         return tool_calls
 
-    def chat(
+    def _chat_impl(
         self,
         messages: list[Message],
         tools: list[dict] | None = None,
@@ -103,7 +105,7 @@ class OpenAIClient(LLMClient):
             usage=usage,
         )
 
-    def chat_stream(
+    def _chat_stream_impl(
         self,
         messages: list[Message],
         tools: list[dict] | None = None,

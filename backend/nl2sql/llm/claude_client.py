@@ -14,6 +14,8 @@ from .message import Message, MessageRole, ToolCall, ToolCallResult
 class ClaudeClient(LLMClient):
     """Client for Anthropic Claude API."""
 
+    provider = "anthropic"
+
     def __init__(self, api_key: str, model: str):
         self._client = Anthropic(api_key=api_key)
         self.model = model
@@ -94,7 +96,7 @@ class ClaudeClient(LLMClient):
                 ))
         return tool_calls
 
-    def chat(
+    def _chat_impl(
         self,
         messages: list[Message],
         tools: list[dict] | None = None,
@@ -132,7 +134,7 @@ class ClaudeClient(LLMClient):
             usage=usage,
         )
 
-    def chat_stream(
+    def _chat_stream_impl(
         self,
         messages: list[Message],
         tools: list[dict] | None = None,
