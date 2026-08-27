@@ -20,6 +20,7 @@ from typing import Callable
 
 from nl2sql.llm import Message, MessageRole
 from nl2sql.llm.factory import create_llm_client
+from nl2sql.tracing import span as _tracing_span
 
 
 # ---------------------------------------------------------------------------
@@ -278,90 +279,102 @@ class DispatcherAgent:
             - intent: 识别的意图类型
             - 各子 Agent 特有的字段
         """
-        # Step 1: 意图分类
-        import time
-        dispatch_start = time.perf_counter()
-        self._send_event("dispatch_started", {"query": user_query})
-        self._send_event("step_detail", {
-            "step": "dispatch",
-            "name": "分析任务",
-            "status": "active",
-        })
+        with _tracing_span(name="dispatcher", metadata={"user_query": user_query}) as disp_span:
+            # Step 1: 意图分类
+            import time
+            dispatch_start = time.perf_counter()
+            self._send_event("dispatch_started", {"query": user_query})
+            self._send_event("step_detail", {
+                "step": "dispatch",
+                "name": "分析任务",
+                "status": "active",
+            })
 
-        dispatch = self._classify_intent(user_query, conversation_history)
+            dispatch = self._classify_intent(user_query, conversation_history)
 
-        self._send_event("dispatch_result", {
-            "intent": dispatch.intent,
-            "confidence": dispatch.confidence,
-            "reasoning": dispatch.reasoning,
-        })
-        dispatch_duration = int((time.perf_counter() - dispatch_start) * 1000)
-        self._send_event("step_detail", {
-            "step": "dispatch",
-            "name": "分析任务",
-            "status": "completed",
-            "duration_ms": dispatch_duration,
-            "detail": {
+            try:
+                disp_span.update(metadata={
+                    "intent": dispatch.intent,
+                    "confidence": dispatch.confidence,
+                })
+            except Exception:
+                pass
+
+            self._send_event("dispatch_result", {
                 "intent": dispatch.intent,
                 "confidence": dispatch.confidence,
                 "reasoning": dispatch.reasoning,
-            },
-        })
-
-        # Step 2: 路由到对应子 Agent
-        if dispatch.intent == "query":
-            result = self._run_query(
-                user_query, conversation_history, selected_datasource_id, extra_state
-            )
-            result["intent"] = result.get("intent", "query")
-
-        elif dispatch.intent == "schema_exploration":
-            if not self.datasources:
-                return {
-                    "answer": "当前项目还没有配置数据源，无法探索 schema。请先连接一个数据源。",
-                    "status": "failed",
-                    "intent": "schema_exploration",
-                    "error": "no datasource",
-                }
-            result = self._run_schema_exploration(user_query, conversation_history)
-
-        elif dispatch.intent == "connect_datasource":
-            result = self._run_connect_datasource(
-                user_query, conversation_history, dispatch.datasource_info
-            )
-
-        else:  # chitchat
-            result = self._run_chitchat(user_query)
-
-        # 发送 final_result 事件
-        # 注意：query 类型由 graph 内的 summarize_node 负责发送 final_result 和 done
-        # 非 query 类型（schema_exploration / connect_datasource / chitchat）
-        # 没有 summarize_node，由 dispatcher 统一发送
-        if dispatch.intent != "query":
-            answer = result.get("answer", "")
-            sql = result.get("sql", "") or ""
-            exec_result = result.get("execution_result")
-            viz_spec = result.get("viz_spec")
-
-            result_payload = None
-            if exec_result and hasattr(exec_result, "success") and exec_result.success:
-                result_payload = {
-                    "columns": exec_result.columns,
-                    "rows": [list(r) for r in exec_result.rows[:100]],
-                    "row_count": exec_result.row_count,
-                    "success": exec_result.success,
-                    "duration_ms": getattr(exec_result, "duration_ms", None),
-                    "truncated": len(exec_result.rows) < exec_result.row_count,
-                }
-
-            self._send_event("final_result", {
-                "answer": answer,
-                "success": result.get("status") == "done",
-                "sql": sql,
-                "result": result_payload,
-                "viz": viz_spec,
-                "intent": dispatch.intent,
             })
-            self._send_event("done", {"status": result.get("status", "unknown")})
+            dispatch_duration = int((time.perf_counter() - dispatch_start) * 1000)
+            self._send_event("step_detail", {
+                "step": "dispatch",
+                "name": "分析任务",
+                "status": "completed",
+                "duration_ms": dispatch_duration,
+                "detail": {
+                    "intent": dispatch.intent,
+                    "confidence": dispatch.confidence,
+                    "reasoning": dispatch.reasoning,
+                },
+            })
 
-        return result
+            # Step 2: 路由到对应子 Agent
+            if dispatch.intent == "query":
+                with _tracing_span(name="nl2sql_agent"):
+                    result = self._run_query(
+                        user_query, conversation_history, selected_datasource_id, extra_state
+                    )
+                    result["intent"] = result.get("intent", "query")
+
+            elif dispatch.intent == "schema_exploration":
+                with _tracing_span(name="schema_explorer_agent"):
+                    if not self.datasources:
+                        return {
+                            "answer": "当前项目还没有配置数据源，无法探索 schema。请先连接一个数据源。",
+                            "status": "failed",
+                            "intent": "schema_exploration",
+                            "error": "no datasource",
+                        }
+                    result = self._run_schema_exploration(user_query, conversation_history)
+
+            elif dispatch.intent == "connect_datasource":
+                with _tracing_span(name="datasource_connector_agent"):
+                    result = self._run_connect_datasource(
+                        user_query, conversation_history, dispatch.datasource_info
+                    )
+
+            else:  # chitchat
+                result = self._run_chitchat(user_query)
+
+            # 发送 final_result 事件
+            # 注意：query 类型由 graph 内的 summarize_node 负责发送 final_result 和 done
+            # 非 query 类型（schema_exploration / connect_datasource / chitchat）
+            # 没有 summarize_node，由 dispatcher 统一发送
+            if dispatch.intent != "query":
+                answer = result.get("answer", "")
+                sql = result.get("sql", "") or ""
+                exec_result = result.get("execution_result")
+                viz_spec = result.get("viz_spec")
+
+                result_payload = None
+                if exec_result and hasattr(exec_result, "success") and exec_result.success:
+                    result_payload = {
+                        "columns": exec_result.columns,
+                        "rows": [list(r) for r in exec_result.rows[:100]],
+                        "row_count": exec_result.row_count,
+                        "success": exec_result.success,
+                        "duration_ms": getattr(exec_result, "duration_ms", None),
+                        "truncated": len(exec_result.rows) < exec_result.row_count,
+                    }
+
+                self._send_event("final_result", {
+                    "answer": answer,
+                    "success": result.get("status") == "done",
+                    "sql": sql,
+                    "result": result_payload,
+                    "viz": viz_spec,
+                    "intent": dispatch.intent,
+                })
+                self._send_event("done", {"status": result.get("status", "unknown")})
+
+            return result
