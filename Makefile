@@ -1,4 +1,4 @@
-.PHONY: help dev up down build build-backend build-frontend backend frontend test test-backend clean logs
+.PHONY: help dev up down build build-backend build-frontend backend frontend test test-backend clean logs langfuse-up langfuse-down langfuse-logs
 
 # 默认目标：显示帮助
 help:
@@ -34,6 +34,21 @@ build-frontend:
 
 logs:
 	docker compose logs -f
+
+# ============ Langfuse 可观测性 ============
+
+langfuse-up:
+	@echo "启动 Langfuse 服务..."
+	docker compose up -d langfuse
+	@echo "Langfuse UI: http://localhost:3030"
+	@echo "默认账号: 自行注册（首次访问创建管理员）"
+
+langfuse-down:
+	@echo "停止 Langfuse 服务..."
+	docker compose stop langfuse langfuse-db
+
+langfuse-logs:
+	docker compose logs -f langfuse
 
 # ============ 开发模式 ============
 

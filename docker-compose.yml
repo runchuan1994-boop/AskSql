@@ -62,5 +62,38 @@ services:
       retries: 10
     restart: unless-stopped
 
+  langfuse-db:
+    image: postgres:16-alpine
+    container_name: nl2sql-langfuse-db
+    environment:
+      - POSTGRES_DB=langfuse
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse_secret
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: nl2sql-langfuse
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    ports:
+      - "3030:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse_secret@langfuse-db:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-my-dev-secret-change-in-production}
+      - SALT=${LANGFUSE_SALT:-my-dev-salt-change-in-production}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      - TELEMETRY_ENABLED=${LANGFUSE_TELEMETRY_ENABLED:-false}
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  langfuse-db-data:
