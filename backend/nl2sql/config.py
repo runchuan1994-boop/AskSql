@@ -27,5 +27,11 @@ class Settings(BaseSettings):
     sql_max_rows: int = 1000
     agent_timeout_seconds: int = 300
 
+    # Langfuse 可观测性
+    langfuse_enabled: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "http://localhost:3030"
+
 
 settings = Settings()
