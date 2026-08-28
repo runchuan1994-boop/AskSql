@@ -82,6 +82,18 @@ info "启动服务..."
 docker compose up -d
 ok "容器已启动"
 
+# 8.1 启动 Langfuse 可观测性服务
+echo ""
+info "检查 Langfuse 服务..."
+# 判断 langfuse 容器是否已经在运行
+if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -q '^langfuse running$'; then
+    ok "Langfuse 已在运行"
+else
+    info "启动 Langfuse 服务..."
+    docker compose up -d langfuse 2>/dev/null || warn "Langfuse 启动失败，将继续启动主服务（可观测性功能不可用）"
+    ok "Langfuse 服务已启动"
+fi
+
 # 9. 等待后端就绪
 echo ""
 info "等待后端服务就绪..."
@@ -102,6 +114,26 @@ if [ $waited -ge $max_wait ]; then
     warn "后端启动超时，请检查日志: docker compose logs backend"
 fi
 
+# 9.1 等待 Langfuse 就绪（如果在运行）
+if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -q '^langfuse running$'; then
+    info "等待 Langfuse 服务就绪..."
+    langfuse_wait=0
+    langfuse_max=120
+    while [ $langfuse_wait -lt $langfuse_max ]; do
+        if curl -sf http://localhost:3030/api/public/health &> /dev/null; then
+            ok "Langfuse 就绪（等待了 ${langfuse_wait}s）"
+            break
+        fi
+        sleep 3
+        langfuse_wait=$((langfuse_wait + 3))
+        echo -n "."
+    done
+    echo ""
+    if [ $langfuse_wait -ge $langfuse_max ]; then
+        warn "Langfuse 启动较慢，可稍后访问 http://localhost:3030"
+    fi
+fi
+
 # 10. 沙盒运行时提示
 if [ "${SANDBOX_ENABLED:-false}" = "true" ]; then
     echo ""
@@ -120,6 +152,7 @@ echo ""
 echo -e "  前端地址:  http://localhost:5173"
 echo -e "  后端 API:  http://localhost:8000"
 echo -e "  API 文档:  http://localhost:8000/docs"
+echo -e "  Langfuse:  http://localhost:3030 （可观测性 / LLM 追踪）"
 echo ""
 echo -e "  查看日志:  docker compose logs -f"
 echo -e "  停止服务:  docker compose down"

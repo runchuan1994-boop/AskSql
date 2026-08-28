@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     sql_max_rows: int = 1000
     agent_timeout_seconds: int = 300
 
-    # Langfuse 可观测性
-    langfuse_enabled: bool = False
+    # Langfuse 可观测性（默认开启，缺 key 时静默降级为 no-op）
+    langfuse_enabled: bool = True
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "http://localhost:3030"
