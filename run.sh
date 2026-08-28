@@ -131,6 +131,18 @@ if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -q '^
     echo ""
     if [ $langfuse_wait -ge $langfuse_max ]; then
         warn "Langfuse 启动较慢，可稍后访问 http://localhost:3030"
+    else
+        # 9.2 自动初始化 Langfuse（创建管理员、项目、API Key）
+        if [ -x "$SCRIPT_DIR/scripts/langfuse-init.sh" ]; then
+            echo ""
+            info "自动初始化 Langfuse..."
+            LANGFUSE_HOST="http://localhost:3030" \
+            LANGFUSE_ADMIN_EMAIL="${LANGFUSE_ADMIN_EMAIL:-admin@nl2sql.local}" \
+            LANGFUSE_ADMIN_PASSWORD="${LANGFUSE_ADMIN_PASSWORD:-admin123456}" \
+            LANGFUSE_ADMIN_NAME="${LANGFUSE_ADMIN_NAME:-NL2SQL Admin}" \
+            LANGFUSE_PROJECT_NAME="${LANGFUSE_PROJECT_NAME:-NL2SQL}" \
+            "$SCRIPT_DIR/scripts/langfuse-init.sh" || warn "Langfuse 自动初始化未完成，不影响主服务使用"
+        fi
     fi
 fi
 
