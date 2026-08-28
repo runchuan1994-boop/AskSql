@@ -1,6 +1,7 @@
 /**
  * 折线图组件
  */
+import { useRef } from 'react'
 import {
   LineChart,
   Line,
@@ -21,6 +22,7 @@ import {
   formatNumberTick,
   smartFormatTick,
 } from './chartUtils'
+import { useAutoXInterval } from '../../hooks/useAutoXInterval'
 
 interface LineChartViewProps {
   chart: ChartSpec
@@ -29,9 +31,27 @@ interface LineChartViewProps {
 }
 
 export function LineChartView({ chart, columns, rows }: LineChartViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
   const data = rowsToObjects(columns, rows, chart.limit)
   const xField = resolveXField(chart, columns)
   const yFields = resolveYFields(chart, columns)
+
+  // X 轴标签自适应密度
+  const xLabels = data.map((d) => {
+    const raw = d[xField]
+    if (chart.x_format === 'date' || chart.x_format === 'month' || chart.x_format === 'datetime') {
+      return formatDateTick(raw)
+    }
+    if (chart.x_format === 'number') {
+      return formatNumberTick(raw)
+    }
+    return smartFormatTick(raw)
+  })
+  const autoX = useAutoXInterval(containerRef, xLabels, {
+    fontSize: 11,
+    maxRotation: 40,
+    minGap: 8,
+  })
 
   // X 轴 tick 格式化
   const formatX = (value: unknown) => {
@@ -71,7 +91,7 @@ export function LineChartView({ chart, columns, rows }: LineChartViewProps) {
   const isMultiSeries = yFields.length > 1
 
   return (
-    <div className="w-full h-64">
+    <div ref={containerRef} className="w-full h-64">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -80,7 +100,10 @@ export function LineChartView({ chart, columns, rows }: LineChartViewProps) {
             tick={{ fontSize: 11, fill: '#94a3b8' }}
             tickLine={false}
             axisLine={{ stroke: '#e2e8f0' }}
-            interval={0}
+            interval={autoX.interval}
+            angle={autoX.angle}
+            textAnchor={autoX.textAnchor}
+            height={autoX.height}
             tickFormatter={formatX}
           />
           <YAxis

@@ -1,6 +1,7 @@
 /**
  * 柱状图组件
  */
+import { useRef } from 'react'
 import {
   BarChart,
   Bar,
@@ -22,6 +23,7 @@ import {
   formatNumberTick,
   smartFormatTick,
 } from './chartUtils'
+import { useAutoXInterval } from '../../hooks/useAutoXInterval'
 
 interface BarChartViewProps {
   chart: ChartSpec
@@ -30,10 +32,28 @@ interface BarChartViewProps {
 }
 
 export function BarChartView({ chart, columns, rows }: BarChartViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
   const data = rowsToObjects(columns, rows, chart.limit)
   const xField = resolveXField(chart, columns)
   const yFields = resolveYFields(chart, columns)
   const stacked = chart.stacked ?? false
+
+  // X 轴标签自适应密度
+  const xLabels = data.map((d) => {
+    const raw = d[xField]
+    if (chart.x_format === 'date' || chart.x_format === 'month' || chart.x_format === 'datetime') {
+      return formatDateTick(raw)
+    }
+    if (chart.x_format === 'number') {
+      return formatNumberTick(raw)
+    }
+    return smartFormatTick(raw)
+  })
+  const autoX = useAutoXInterval(containerRef, xLabels, {
+    fontSize: 11,
+    maxRotation: 40,
+    minGap: 8,
+  })
 
   // X 轴 tick 格式化
   const formatX = (value: unknown) => {
@@ -67,10 +87,9 @@ export function BarChartView({ chart, columns, rows }: BarChartViewProps) {
   }
 
   const isMultiSeries = yFields.length > 1
-  const shouldRotate = data.length > 8
 
   return (
-    <div className="w-full h-64">
+    <div ref={containerRef} className="w-full h-64">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -79,10 +98,10 @@ export function BarChartView({ chart, columns, rows }: BarChartViewProps) {
             tick={{ fontSize: 11, fill: '#94a3b8' }}
             tickLine={false}
             axisLine={{ stroke: '#e2e8f0' }}
-            angle={shouldRotate ? -30 : 0}
-            textAnchor={shouldRotate ? 'end' : 'middle'}
-            height={shouldRotate ? 60 : 30}
-            interval={0}
+            angle={autoX.angle}
+            textAnchor={autoX.textAnchor}
+            height={autoX.height}
+            interval={autoX.interval}
             tickFormatter={formatX}
           />
           <YAxis

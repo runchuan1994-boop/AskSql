@@ -14,12 +14,16 @@ import {
   Key,
   Loader2,
   Lightbulb,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
-import { getSchemaOverview, getTableDetail } from '../../lib/api'
+import { getSchemaOverview, getTableDetail, startProfiling, getProfilingStatus } from '../../lib/api'
 import type {
   DatasourceSchemaOverview,
   TableDetail,
   ColumnDetail,
+  ProfilingStatus,
 } from '../../lib/types'
 import { clsx } from '../../lib/utils'
 import { useTranslation } from '../../i18n'

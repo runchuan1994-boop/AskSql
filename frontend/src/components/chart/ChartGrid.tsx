@@ -3,9 +3,11 @@
  * 玻璃质感风格
  * 排列多个图表
  */
-import { BarChart3 } from 'lucide-react'
-import type { VizSpec, QueryResult } from '../../lib/types'
+import { useState } from 'react'
+import { BarChart3, ZoomIn } from 'lucide-react'
+import type { VizSpec, QueryResult, ChartSpec } from '../../lib/types'
 import { ChartRenderer, CHART_TYPE_LABELS } from './ChartRenderer'
+import { ChartModal } from './ChartModal'
 
 interface ChartGridProps {
   viz: VizSpec
@@ -13,6 +15,8 @@ interface ChartGridProps {
 }
 
 export function ChartGrid({ viz, result }: ChartGridProps) {
+  const [activeChart, setActiveChart] = useState<ChartSpec | null>(null)
+
   // 过滤掉 table 类型的图表（由 ResultTable 单独展示）
   const charts = viz.charts.filter((c) => c.type !== 'table')
 
@@ -47,16 +51,23 @@ export function ChartGrid({ viz, result }: ChartGridProps) {
         {charts.map((chart, index) => (
           <div
             key={index}
-            className="rounded-2xl border border-white/60 bg-white/70 backdrop-blur-xl overflow-hidden shadow-glass hover:shadow-glass-lg transition-all"
+            className="rounded-2xl border border-white/60 bg-white/70 backdrop-blur-xl overflow-hidden shadow-glass hover:shadow-glass-lg transition-all group cursor-zoom-in"
+            onClick={() => setActiveChart(chart)}
           >
             <div className="px-4 py-3 border-b border-white/40 flex items-center justify-between bg-white/30">
               <div className="flex items-center gap-2">
                 <BarChart3 size={14} className="text-brand-500" />
                 <h3 className="text-sm font-medium text-slate-700">{chart.title}</h3>
               </div>
-              <span className="text-xs text-slate-400 bg-white/60 px-2 py-0.5 rounded-xl">
-                {CHART_TYPE_LABELS[chart.type]}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 bg-white/60 px-2 py-0.5 rounded-xl">
+                  {CHART_TYPE_LABELS[chart.type]}
+                </span>
+                <ZoomIn
+                  size={14}
+                  className="text-slate-300 group-hover:text-brand-500 transition-colors"
+                />
+              </div>
             </div>
             <div className="p-4">
               <ChartRenderer
@@ -68,6 +79,14 @@ export function ChartGrid({ viz, result }: ChartGridProps) {
           </div>
         ))}
       </div>
+
+      {/* 放大弹窗 */}
+      <ChartModal
+        chart={activeChart}
+        columns={result.columns}
+        rows={result.rows}
+        onClose={() => setActiveChart(null)}
+      />
     </div>
   )
 }
