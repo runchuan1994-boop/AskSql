@@ -99,7 +99,7 @@ SQL 本身不难，难的是**来回沟通的成本**和**重复劳动的时间*
 ### 1. 克隆 & 配置
 
 ```bash
-git clone https://github.com/yourusername/asksql.git
+git clone https://github.com/Reiner-Liu/AskSql.git
 cd asksql
 cp backend/.env.example .env
 ```
@@ -327,6 +327,34 @@ cd backend && pytest tests/ -v
 
 ---
 
+## 👋 关于作者
+
+你好，我是 **Reiner Liu**，AskSql 的作者。全栈开发者，热爱 AI、开发者工具和一切能让人少做重复劳动的东西。
+
+### 🎯 我正在找工作！
+
+如果你在做 **AI 基础设施**、**LLM 应用**、**开发者工具** 或 **数据平台** 相关的有趣事情，欢迎聊聊。我能带来：
+
+- 5+ 年全栈开发经验（Python / TypeScript / React）
+- LLM Agent 架构、LangGraph、生产级 AI 系统的实战经验
+- 从 0 到 1 做产品的完整经历
+- 强产品感 + 行动力优先
+
+### 📬 联系方式
+
+| 渠道 | 怎么联系 |
+|------|----------|
+| 📧 邮箱 | [runchuan1994@gmail.com](mailto:runchuan1994@gmail.com) |
+| 💬 微信 | 扫描下方二维码 |
+| 💼 GitHub | [@Reiner-Liu](https://github.com/Reiner-Liu) |
+
+<div align="center">
+  <img src="docs/assets/wechat-qr.png" alt="微信二维码" width="200" />
+  <p><em>扫码加个微信聊聊～</em></p>
+</div>
+
+---
+
 ## 📄 License
 
 MIT — 随便用，别做坏事就行。
@@ -337,8 +365,8 @@ MIT — 随便用，别做坏事就行。
 
 用 ❤️ 打造，为了那些想要答案而不是 SQL 的人。
 
-[⭐ 点个 Star](https://github.com/yourusername/asksql) ·
-[🐛 提个 Bug](https://github.com/yourusername/asksql/issues) ·
-[💬 讨论交流](https://github.com/yourusername/asksql/discussions)
+[⭐ 点个 Star](https://github.com/Reiner-Liu/AskSql) ·
+[🐛 提个 Bug](https://github.com/Reiner-Liu/AskSql/issues) ·
+[💬 讨论交流](https://github.com/Reiner-Liu/AskSql/discussions)
 
 </div>

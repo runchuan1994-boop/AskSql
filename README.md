@@ -99,7 +99,7 @@ Three steps, that's it.
 ### 1. Clone & configure
 
 ```bash
-git clone https://github.com/yourusername/asksql.git
+git clone https://github.com/Reiner-Liu/AskSql.git
 cd asksql
 cp backend/.env.example .env
 ```
@@ -328,6 +328,34 @@ It depends on the model, your schema complexity, and the question. With Claude S
 
 ---
 
+## 👋 About the Author
+
+Hi, I'm **Reiner Liu** — the creator of AskSql. I'm a full-stack developer passionate about AI, developer tools, and building things that make people's work easier.
+
+### 🎯 I'm currently looking for new opportunities!
+
+If you're working on interesting problems in **AI infrastructure**, **LLM applications**, **developer tools**, or **data platforms** — I'd love to chat. I bring:
+
+- 5+ years of full-stack development experience (Python / TypeScript / React)
+- Deep hands-on experience with LLM agent architectures, LangGraph, and production AI systems
+- A track record of shipping products from zero to one
+- Strong product sense and a bias for action
+
+### 📬 Get in touch
+
+| Channel | Where |
+|---------|-------|
+| 📧 Email | [runchuan1994@gmail.com](mailto:runchuan1994@gmail.com) |
+| 💬 WeChat | Scan the QR code below |
+| 💼 GitHub | [@Reiner-Liu](https://github.com/Reiner-Liu) |
+
+<div align="center">
+  <img src="docs/assets/wechat-qr.png" alt="WeChat QR Code" width="200" />
+  <p><em>Scan to add me on WeChat</em></p>
+</div>
+
+---
+
 ## 📄 License
 
 MIT — use it, build on it, just don't be evil about it.
@@ -338,8 +366,8 @@ MIT — use it, build on it, just don't be evil about it.
 
 Made with ❤️ for people who want answers, not SQL.
 
-[⭐ Star on GitHub](https://github.com/yourusername/asksql) ·
-[🐛 Report a bug](https://github.com/yourusername/asksql/issues) ·
-[💬 Discuss](https://github.com/yourusername/asksql/discussions)
+[⭐ Star on GitHub](https://github.com/Reiner-Liu/AskSql) ·
+[🐛 Report a bug](https://github.com/Reiner-Liu/AskSql/issues) ·
+[💬 Discuss](https://github.com/Reiner-Liu/AskSql/discussions)
 
 </div>
