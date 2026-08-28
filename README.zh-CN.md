@@ -348,10 +348,8 @@ cd backend && pytest tests/ -v
 | 💬 微信 | 扫描下方二维码 |
 | 💼 GitHub | [@Reiner-Liu](https://github.com/Reiner-Liu) |
 
-<div align="center">
-  <img src="docs/assets/wechat-qr.png" alt="微信二维码" width="200" />
-  <p><em>扫码加个微信聊聊～</em></p>
-</div>
+<img src="docs/assets/wechat-qr.png" alt="微信二维码" width="180" />
+<small><em>扫码加个微信聊聊～</em></small>
 
 ---
 

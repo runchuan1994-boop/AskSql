@@ -349,10 +349,8 @@ If you're working on interesting problems in **AI infrastructure**, **LLM applic
 | 💬 WeChat | Scan the QR code below |
 | 💼 GitHub | [@Reiner-Liu](https://github.com/Reiner-Liu) |
 
-<div align="center">
-  <img src="docs/assets/wechat-qr.png" alt="WeChat QR Code" width="200" />
-  <p><em>Scan to add me on WeChat</em></p>
-</div>
+<img src="docs/assets/wechat-qr.png" alt="WeChat QR Code" width="180" />
+<small><em>Scan to add me on WeChat</em></small>
 
 ---
 
