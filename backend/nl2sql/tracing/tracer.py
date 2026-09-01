@@ -100,18 +100,22 @@ class _GenerationContext:
         if output is not None:
             kwargs["output"] = output
         if usage is not None:
-            # Normalize usage keys for Langfuse (expects input_tokens / output_tokens / total_tokens)
-            langfuse_usage: dict[str, int] = {}
+            # Normalize usage keys for Langfuse v2 SDK (expects camelCase:
+            # promptTokens / completionTokens / totalTokens, OR
+            # input / output / total with unit=...)
+            langfuse_usage: dict[str, int | str] = {}
             if "input_tokens" in usage:
-                langfuse_usage["input_tokens"] = usage["input_tokens"]
+                langfuse_usage["promptTokens"] = usage["input_tokens"]
             elif "prompt_tokens" in usage:
-                langfuse_usage["input_tokens"] = usage["prompt_tokens"]
+                langfuse_usage["promptTokens"] = usage["prompt_tokens"]
             if "output_tokens" in usage:
-                langfuse_usage["output_tokens"] = usage["output_tokens"]
+                langfuse_usage["completionTokens"] = usage["output_tokens"]
             elif "completion_tokens" in usage:
-                langfuse_usage["output_tokens"] = usage["completion_tokens"]
+                langfuse_usage["completionTokens"] = usage["completion_tokens"]
             if "total_tokens" in usage:
-                langfuse_usage["total_tokens"] = usage["total_tokens"]
+                langfuse_usage["totalTokens"] = usage["total_tokens"]
+            elif "promptTokens" in langfuse_usage and "completionTokens" in langfuse_usage:
+                langfuse_usage["totalTokens"] = langfuse_usage["promptTokens"] + langfuse_usage["completionTokens"]
             if langfuse_usage:
                 kwargs["usage"] = langfuse_usage
         if model is not None:

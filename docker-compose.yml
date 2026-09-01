@@ -79,7 +79,9 @@ services:
     restart: unless-stopped
 
   langfuse:
-    image: langfuse/langfuse:latest
+    # v2 版本（仅需 Postgres，轻量快速）
+    # v3 版本需要额外部署 ClickHouse，适合大规模生产环境
+    image: langfuse/langfuse:2
     container_name: nl2sql-langfuse
     depends_on:
       langfuse-db:
@@ -89,6 +91,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://langfuse:langfuse_secret@langfuse-db:5432/langfuse
       - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-my-dev-secret-change-in-production}
+      - NEXTAUTH_URL=http://localhost:3030
       - SALT=${LANGFUSE_SALT:-my-dev-salt-change-in-production}
       - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
       - TELEMETRY_ENABLED=${LANGFUSE_TELEMETRY_ENABLED:-false}
